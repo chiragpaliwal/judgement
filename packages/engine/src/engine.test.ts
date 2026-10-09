@@ -28,6 +28,8 @@ import {
   type Settings,
 } from './index';
 
+const FAST = { samples: 4 };
+
 const settings = (o: Partial<Settings> = {}): Settings => ({ startCards: 8, tracker: true, turnTimer: 0, ...o });
 
 describe('schedule', () => {
@@ -178,7 +180,7 @@ function playOut(n: number, start: number, seed: number, firstDealer: number, tr
       for (const c of all) expect(fullDeck()).toContain(c);
     }
     if (state.phase === 'bidding') {
-      const bid = botBid(state, r.turn);
+      const bid = botBid(state, r.turn, FAST);
       expect(legalBids(r, r.turn)).toContain(bid);
       state = ok(applyAction(state, { type: 'bid', seat: r.turn, bid }));
       if (state.phase === 'playing') {
@@ -187,7 +189,7 @@ function playOut(n: number, start: number, seed: number, firstDealer: number, tr
       }
     } else if (state.phase === 'playing') {
       const seat = r.turn;
-      const card = botPlay(state, seat);
+      const card = botPlay(state, seat, FAST);
       const open = r.tricks[r.tricks.length - 1];
       const led = open && open.winner === null && open.plays.length ? open.plays[0].card[1] : null;
       expect(legalCards(r.hands[seat], led as never)).toContain(card);
@@ -234,8 +236,8 @@ describe('full games (property)', () => {
 
   it('tracker off hides older tricks', () => {
     let { state } = createGame(4, settings({ tracker: false }), 7, 0);
-    while (state.phase === 'bidding') state = ok(applyAction(state, { type: 'bid', seat: state.round.turn, bid: botBid(state, state.round.turn) }));
-    for (let i = 0; i < 4 * 3; i++) state = ok(applyAction(state, { type: 'play', seat: state.round.turn, card: botPlay(state, state.round.turn) }));
+    while (state.phase === 'bidding') state = ok(applyAction(state, { type: 'bid', seat: state.round.turn, bid: botBid(state, state.round.turn, FAST) }));
+    for (let i = 0; i < 4 * 3; i++) state = ok(applyAction(state, { type: 'play', seat: state.round.turn, card: botPlay(state, state.round.turn, FAST) }));
     const v = viewFor(state, 0);
     expect(v.round.tricksDone).toBe(3);
     expect(v.round.tricks.length).toBe(2);

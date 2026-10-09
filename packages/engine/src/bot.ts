@@ -1,90 +1,154 @@
-import { rankOf, suitOf, SUITS, type Card } from './cards';
-import { need } from './derive';
-import {
-  beats,
-  hookedBid,
-  ledSuit,
-  legalBids,
-  legalCards,
-  lowestCard,
-  openTrick,
-  winningIndex,
-} from './rules';
+import { rankOf, suitOf, type Card } from './cards';
+import { heuristicBid, heuristicEstimate } from './botPolicy';
+import { beliefFor, cloneSim, policyMove, rollout, sampleWorld, step, threatWeights, utility, type Sim } from './botSearch';
+import { biddingOrder, hookedBid, ledSuit, legalBids, legalCards, openTrick } from './rules';
+import { mulberry32 } from './rng';
 import type { GameState } from './types';
 
-/** Heuristic bid: side aces/kings, high trumps, plus ruffing potential. */
-export function botBid(state: GameState, seat: number): number {
-  const r = state.round;
-  const hand = r.hands[seat];
-  const trumps = hand.filter((c) => suitOf(c) === r.trump);
-  let est = 0;
-  for (const c of hand) {
-    const s = suitOf(c);
-    const rk = rankOf(c);
-    if (s === r.trump) {
-      if (rk >= 11) est += 1;
-      else if (trumps.length >= 4) est += 0.5;
-    } else if (rk === 14) est += 1;
-    else if (rk === 13) est += hand.filter((x) => suitOf(x) === s).length >= 2 ? 0.75 : 0.4;
-  }
-  if (trumps.length >= 2) {
-    for (const s of SUITS) {
-      if (s === r.trump) continue;
-      const len = hand.filter((c) => suitOf(c) === s).length;
-      if (len <= 1) est += 0.5;
-    }
-  }
-  // Big tables make every trick harder to take.
-  est *= Math.max(0.6, 1 - (state.n - 4) * 0.06);
-  let bid = Math.max(0, Math.min(r.cards, Math.round(est)));
-  if (hookedBid(r, seat) === bid) {
-    const options = legalBids(r, seat);
-    bid = options.reduce((best, b) => (Math.abs(b - est) < Math.abs(best - est) ? b : best), options[0]);
-  }
-  return bid;
+export interface BotOptions {
+  /** Sampled worlds per decision. Default scales with the work left in the round. */
+  samples?: number;
 }
 
-/** Heuristic play: take what you need as cheaply as possible, otherwise duck. */
-export function botPlay(state: GameState, seat: number): Card {
+/** Simulated card plays per decision, across all candidates and samples. */
+const BUDGET = 60_000;
+const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+
+function rngFor(state: GameState, seat: number) {
+  const r = state.round;
+  const plays = r.tricks.reduce((a, t) => a + t.plays.length, 0);
+  const bids = r.bids.filter((b) => b !== null).length;
+  return mulberry32(state.seed ^ Math.imul(r.index + 1, 0x9e3779b1) ^ Math.imul(plays + bids * 97 + 1, 0x85ebca6b) ^ (seat << 24));
+}
+
+/** Pick the candidate with the best mean utility; exact ties go to `prefer`, else the first. */
+function pickBest<T>(cands: readonly T[], scores: readonly number[], prefer: T): T {
+  let best = -Infinity;
+  for (const s of scores) best = Math.max(best, s);
+  const top = cands.filter((_, i) => scores[i] >= best - 1e-9);
+  return top.includes(prefer) ? prefer : top[0];
+}
+
+/** Bid by simulating the round for each plausible bid over sampled deals. */
+export function botBid(state: GameState, seat: number, opts: BotOptions = {}): number {
+  const r = state.round;
+  const hand = r.hands[seat];
+  const n = state.n;
+  const est = heuristicEstimate(hand, r.trump, n);
+  const legal = legalBids(r, seat);
+  let cands = legal.filter((b) => Math.abs(b - est) <= 2.5);
+  if (!cands.length) cands = [legal.reduce((a, b) => (Math.abs(b - est) < Math.abs(a - est) ? b : a))];
+  const fallback = heuristicBid(hand, r.trump, r.cards, n, hookedBid(r, seat));
+  if (cands.length === 1) return cands[0];
+
+  const samples = opts.samples ?? clamp(Math.floor(BUDGET / (cands.length * n * r.cards)), 16, 200);
+  const rand = rngFor(state, seat);
+  const belief = beliefFor(state, seat);
+  const order = biddingOrder(r.dealer, n);
+  const after = order.slice(order.indexOf(seat) + 1);
+  const weights = threatWeights(state.totals, seat);
+  const scores = cands.map(() => 0);
+
+  for (let k = 0; k < samples; k++) {
+    const world = sampleWorld(belief, rand);
+    world[seat] = [...hand];
+    cands.forEach((b, ci) => {
+      const bids = r.bids.map((x) => x ?? 0);
+      const placed: (number | null)[] = [...r.bids];
+      bids[seat] = placed[seat] = b;
+      for (const s of after) {
+        const hooked = hookedBid({ bids: placed, dealer: r.dealer, cards: r.cards }, s);
+        bids[s] = placed[s] = heuristicBid(world[s], r.trump, r.cards, n, hooked);
+      }
+      const sim: Sim = {
+        n,
+        cards: r.cards,
+        trump: r.trump,
+        bids,
+        won: Array(n).fill(0),
+        hands: world.map((h) => [...h]),
+        plays: [],
+        turn: order[0],
+        tricksDone: 0,
+        live: new Set(world.flat()),
+      };
+      rollout(sim);
+      scores[ci] += utility(sim, seat, weights);
+    });
+  }
+  return pickBest(cands, scores, fallback);
+}
+
+/** Choose a card by playing out sampled worlds for each distinct legal option. */
+export function botPlay(state: GameState, seat: number, opts: BotOptions = {}): Card {
   const r = state.round;
   const hand = r.hands[seat];
   const plays = openTrick(r)?.plays ?? [];
   const legal = legalCards(hand, ledSuit(plays));
-  const bid = r.bids[seat] ?? 0;
-  const won = r.won[seat];
-  const doneTricks = r.tricks.filter((t) => t.winner !== null).length;
-  const left = r.cards - doneTricks;
-  const out = won > bid || bid - won > left;
-  const wants = !out && need(bid, won) > 0;
-  const byRankAsc = (a: Card, b: Card) => rankOf(a) - rankOf(b) || (suitOf(a) === r.trump ? 1 : 0) - (suitOf(b) === r.trump ? 1 : 0);
+  if (legal.length === 1) return legal[0];
 
-  if (out) return lowestCard(legal, r.trump);
+  const belief = beliefFor(state, seat);
+  const cands = distinct(legal, new Set(belief.pool));
+  const tricksDone = r.tricks.filter((t) => t.winner !== null).length;
+  const base: Sim = {
+    n: state.n,
+    cards: r.cards,
+    trump: r.trump,
+    bids: r.bids.map((b) => b ?? 0),
+    won: [...r.won],
+    hands: [],
+    plays: [...plays],
+    turn: seat,
+    tricksDone,
+    live: new Set(),
+  };
+  // What the policy itself would do here, using only the bot's own hand: the tie-breaker.
+  const prefer = policyMove({ ...base, hands: Object.assign([], { [seat]: hand }), live: new Set([...belief.pool, ...hand]) });
+  if (cands.length === 1) return cands[0];
 
-  if (!plays.length) {
-    // Leading.
-    if (wants) {
-      const sure = legal.filter((c) => rankOf(c) === 14 || (suitOf(c) === r.trump && rankOf(c) >= 12));
-      if (sure.length) return sure.sort(byRankAsc)[sure.length - 1];
-      return [...legal].sort(byRankAsc)[legal.length - 1];
-    }
-    return lowestCard(legal, r.trump);
+  const remaining = (r.cards - tricksDone) * state.n - plays.length;
+  const samples = opts.samples ?? clamp(Math.floor(BUDGET / (cands.length * remaining)), 24, 400);
+  const rand = rngFor(state, seat);
+  const weights = threatWeights(state.totals, seat);
+  const scores = cands.map(() => 0);
+
+  for (let k = 0; k < samples; k++) {
+    const world = sampleWorld(belief, rand);
+    world[seat] = [...hand];
+    const sim: Sim = { ...base, hands: world, live: new Set(world.flat()) };
+    cands.forEach((c, ci) => {
+      const s = cloneSim(sim);
+      step(s, c);
+      rollout(s);
+      scores[ci] += utility(s, seat, weights);
+    });
   }
+  return pickBest(cands, scores, cands.includes(prefer) ? prefer : equivalent(prefer, cands, belief.pool));
+}
 
-  const led = suitOf(plays[0].card);
-  const best = plays[winningIndex(plays, r.trump)].card;
-  const winners = legal.filter((c) => beats(c, best, led, r.trump)).sort(byRankAsc);
-  const losers = legal.filter((c) => !beats(c, best, led, r.trump)).sort(byRankAsc);
-  const lastToPlay = plays.length === state.n - 1;
-
-  if (wants) {
-    if (winners.length) {
-      // Last to play: cheapest winner is guaranteed. Otherwise prefer a strong winner.
-      return lastToPlay ? winners[0] : winners[winners.length - 1];
-    }
-    return losers.length ? losers[0] : lowestCard(legal, r.trump);
+/**
+ * Collapse cards that are interchangeable: same suit with no unseen card ranked between them.
+ * Keeps the lowest card of each run.
+ */
+function distinct(legal: readonly Card[], unseen: ReadonlySet<Card>): Card[] {
+  const sorted = [...legal].sort((a, b) => suitOf(a).localeCompare(suitOf(b)) || rankOf(a) - rankOf(b));
+  const out: Card[] = [];
+  for (const c of sorted) {
+    const prev = out[out.length - 1];
+    if (prev && suitOf(prev) === suitOf(c) && !gap(prev, c, unseen)) continue;
+    out.push(c);
   }
-  // Wants to lose: highest card that still loses, else the cheapest overall.
-  if (losers.length) return losers[losers.length - 1];
-  // Forced to win: shed the strongest card.
-  return winners[winners.length - 1];
+  return out;
+}
+
+function gap(lo: Card, hi: Card, unseen: ReadonlySet<Card>): boolean {
+  for (const u of unseen) if (suitOf(u) === suitOf(lo) && rankOf(u) > rankOf(lo) && rankOf(u) < rankOf(hi)) return true;
+  return false;
+}
+
+/** The representative in `cands` of the run containing `card`. */
+function equivalent(card: Card, cands: readonly Card[], pool: readonly Card[]): Card {
+  const unseen = new Set(pool);
+  const same = cands.filter((c) => suitOf(c) === suitOf(card) && rankOf(c) <= rankOf(card) && !gap(c, card, unseen));
+  return same.length ? same[same.length - 1] : cands[0];
 }
