@@ -1,0 +1,21 @@
+{
+  "name": "judgement",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.3.0",
+  "scripts": {
+    "dev": "pnpm --filter @judgement/web build && pnpm --parallel --filter @judgement/web --filter @judgement/server dev",
+    "build": "pnpm --filter @judgement/web build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "sim": "node apps/server/scripts/sim.mjs",
+    "e2e:shots": "node e2e/shots.mjs",
+    "e2e:pause": "node e2e/pause.mjs",
+    "deploy": "pnpm build && pnpm --filter @judgement/server deploy"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "partysocket": "^1.3.0",
+    "ws": "^8.22.0"
+  }
+}

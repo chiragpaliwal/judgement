@@ -1,0 +1,30 @@
+{
+  "name": "@judgement/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@judgement/engine": "workspace:*",
+    "motion": "^14.0.0",
+    "partysocket": "^1.3.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.0.3",
+    "workbox-window": "^7.4.1"
+  }
+}

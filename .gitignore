@@ -1,0 +1,25 @@
+node_modules
+dist
+.wrangler
+.DS_Store
+*.log
+.dev.vars
+test-results
+playwright-report
+
+# Local design handoff (not committed)
+docs/design-handoff/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Misc
+.claude/
+CLAUDE.md
+.idea
+.vscode
+*.tsbuildinfo
+coverage
+.turbo
