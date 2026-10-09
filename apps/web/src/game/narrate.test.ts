@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GameView } from '@judgement/engine';
-import { bidNote, hintLine, recapLine, sharedRanks, stakeLine, storyLine, waitLine } from './narrate';
+import { bidNote, hintLine, recapLine, sharedRanks, storyLine, waitLine } from './narrate';
 
 const names = ['You', 'Ira', 'Mei', 'Asha', 'Ben', 'Dev'];
 
@@ -28,14 +28,6 @@ describe('narrate', () => {
     expect(hintLine(g, 'Jd', names)).toBe('The J♦ won’t beat Dev’s K♦. Dev stays on top.');
     expect(hintLine(g, 'Ad', names)).toBe('The A♦ beats Dev’s K♦ and takes the lead.');
     expect(hintLine(g, '2s', names)).toBe('The 2♠ trumps Dev’s K♦ and takes the lead.');
-  });
-
-  it('stake line for a zero bidder uses names, not pronouns', () => {
-    const g = view({ tricks: [trick], turn: 1 });
-    const s = stakeLine(g, 1, names, [[], [], [], [], [], []]);
-    expect(s.title).toBe('Ira bid 0.');
-    expect(s.body).toBe('Any diamond under Dev’s K♦ keeps Ira clean. Out of diamonds, Ira can throw anything but a spade.');
-    expect(s.body).not.toMatch(/\b(he|she|his|her)\b/);
   });
 
   it('wait line knows when the trick closes', () => {

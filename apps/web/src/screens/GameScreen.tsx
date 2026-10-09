@@ -7,7 +7,6 @@ import {
   openTrick,
   REACTIONS,
   tricksLeft,
-  voids,
   type Card,
   type GameView,
   type Reaction,
@@ -16,7 +15,7 @@ import {
 import { Table } from '../game/Table';
 import { Fan, Hero } from '../game/Hand';
 import { BidSheet, FactChips } from '../game/BidSheet';
-import { heroCaption, hintLine, lastTrickHeadline, stakeLine, turnHeader, waitLine } from '../game/narrate';
+import { heroCaption, hintLine, lastTrickHeadline, turnHeader, waitLine } from '../game/narrate';
 import { initialOf, seatNames } from '../game/seats';
 import { Icon, SuitIcon } from '../ui/icons';
 import { useRoom } from '../net/room';
@@ -109,7 +108,7 @@ function ReactButton() {
 
 /**
  * Keeps the area under the table from shrinking mid-round. The table takes whatever
- * height is left, so without this every turn change (header, hint, stake line,
+ * height is left, so without this every turn change (header, hint,
  * a suit lane emptying) resized the table and every seat jumped.
  */
 function useNoShrink(resetKey: string, enabled: boolean) {
@@ -124,6 +123,27 @@ function useNoShrink(resetKey: string, enabled: boolean) {
     return () => ro.disconnect();
   }, [enabled]);
   return [ref, enabled ? minH : 0] as const;
+}
+
+/** The line above the hand. A toast briefly takes it over; the two crossfade and the height never changes. */
+function HandHeader({ toast, children }: { toast: { id: number; title: string; sub: string } | null; children?: React.ReactNode }) {
+  return (
+    <div className="hh">
+      <AnimatePresence initial={false}>
+        <motion.div key={toast ? `toast-${toast.id}` : 'line'} className={toast ? 'out' : undefined} role={toast ? 'status' : undefined} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+          {toast ? (
+            <>
+              <Icon.Ban />
+              <b>{toast.title}</b>
+              <span className="dim">{toast.sub}</span>
+            </>
+          ) : (
+            children
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
 }
 
 export function GameScreen({ room, game, compact }: { room: RoomView; game: GameView; compact: boolean }) {
@@ -185,13 +205,13 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
       onSelect: select,
       dealKey,
     };
-    if (hand.length === 1 && opts.caption) return <Hero {...common} card={hand[0]} caption={opts.caption} />;
+    if (r.cards === 1 && hand.length === 1 && opts.caption) return <Hero {...common} card={hand[0]} caption={opts.caption} />;
     const size = compact && opts.size === 'lg' ? 'sm' : compact && opts.size === 'sm' ? 'xs' : opts.size;
     return <Fan {...common} size={size} dimmed={opts.dimmed} height={opts.height} />;
   };
 
   const heroCap = (() => {
-    if (hand.length !== 1) return undefined;
+    if (r.cards !== 1 || hand.length !== 1) return undefined;
     const c = heroCaption(game, hand[0], names);
     return (
       <>
@@ -209,18 +229,8 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
     </button>
   ) : null;
 
-  const toastEl = (
-    <AnimatePresence>
-      {toast && (
-        <motion.div key={toast.id} className="toast" role="status" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-          <Icon.Ban />
-          <div>
-            <b>{toast.title}</b> <span className="dim">{toast.sub}</span>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
+  // Same fan size whether it's your turn or not, fixed for the whole round.
+  const playSize = r.cards > 8 ? 'sm' : 'lg';
 
   let lower: React.ReactNode;
   let dock: React.ReactNode;
@@ -229,7 +239,7 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
     // 03 / 04 / 14: your bid.
     lower = (
       <>
-        {hand.length === 1 ? (
+        {r.cards === 1 ? (
           handView({ interactive: false, size: 'sm', caption: heroCap })
         ) : (
           <div style={{ padding: '6px 0 8px' }}>{handView({ interactive: false, size: hand.length > 12 ? 'xs' : hand.length > 6 ? 'sm' : 'lg' })}</div>
@@ -244,7 +254,7 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
     const status = paused ? 'Paused' : me !== null && r.bids[me] !== null ? `You bid ${r.bids[me]}. ${who === 'You' ? '' : `${who} is choosing…`}` : `${who} is choosing…`;
     lower = (
       <>
-        {hand.length === 1 ? null : <FactChips game={game} names={names} wrapClass="pad12" />}
+        {r.cards === 1 ? null : <FactChips game={game} names={names} wrapClass="pad12" />}
         <div style={{ paddingTop: 10 }}>{handView({ interactive: false, size: hand.length > 8 ? 'sm' : 'lg', caption: heroCap })}</div>
       </>
     );
@@ -261,7 +271,7 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
     const head = turnHeader(game, legal?.length ?? 0);
     lower = (
       <>
-        <div className="hh" style={{ marginTop: 6 }}>
+        <HandHeader toast={toast}>
           {head.lead ? (
             <>
               <b>You lead</b>
@@ -275,9 +285,8 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
               <span className="dim">· {head.playable} playable</span>
             </>
           )}
-        </div>
-        {toastEl}
-        {handView({ interactive: true, size: hand.length > 8 ? 'sm' : 'lg', caption: heroCap })}
+        </HandHeader>
+        {handView({ interactive: true, size: playSize, caption: heroCap })}
         <p className="hint" aria-live="polite">
           {selected ? hintLine(game, selected, names) : ''}
         </p>
@@ -295,9 +304,6 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
   } else {
     // 06 / 08: waiting in play.
     const lastTrick = game.phase === 'playing' && tricksLeft(r) === 1;
-    const v = voids(r.tricks, game.n);
-    const actor = r.turn;
-    const showStake = !held && !paused && game.phase === 'playing' && actor !== me;
     if (lastTrick && hand.length === 0 && !held) {
       const head = lastTrickHeadline(game, names);
       const remaining = room.members.map((_, i) => i).filter((i) => i !== me && !plays.some((p) => p.seat === i));
@@ -310,7 +316,7 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
       };
       lower = (
         <>
-          {toastEl}
+          <HandHeader toast={toast} />
           <section className="moment" aria-label="What the last trick means">
             <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
               {head.title}{' '}
@@ -336,25 +342,16 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
         </>
       );
     } else {
-      const stake = showStake ? stakeLine(game, actor, names, v) : null;
       lower = (
         <>
-          {toastEl}
-          {stake && (
-            <div className="stake" aria-live="polite">
-              <div className="a">{initialOf(names[actor])}</div>
-              <div>
-                <b>{stake.title}</b> <span className="dim">{stake.body}</span>
-              </div>
-            </div>
-          )}
           {hand.length > 0 && (
-            <div className="dim" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '10px 20px 0' }}>
-              <b style={{ color: 'var(--text)' }}>Your hand</b>
-              {game.phase === 'playing' && !held && !paused && <span>· {waitLine(game, names)}</span>}
-            </div>
+            <HandHeader toast={toast}>
+              <b>Your hand</b>
+              {game.phase === 'playing' && !held && !paused && <span className="dim">· {waitLine(game, names)}</span>}
+            </HandHeader>
           )}
-          {handView({ interactive: false, size: 'sm', dimmed: true, height: compact ? 92 : 100, caption: heroCap })}
+          {handView({ interactive: false, size: playSize, dimmed: true, caption: heroCap })}
+          <p className="hint" aria-hidden />
         </>
       );
     }

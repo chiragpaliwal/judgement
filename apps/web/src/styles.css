@@ -44,6 +44,8 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2
 input { font: inherit; color: inherit; }
 h1, h2, h3, p { margin: 0; }
 
+/* Emoji straight from the system emoji font: falling back from the webfont mis-measured the newest ones (🫡) on iOS and clipped them. */
+.rx, .bub { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; line-height: 1; }
 .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .dim { color: var(--text-dim); }
 .k { font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-dim); }
@@ -228,14 +230,16 @@ h1, h2, h3, p { margin: 0; }
 .lt svg { width: 14px; height: 14px; }
 
 /* ---------- Under the table ---------- */
-.hh { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 0 20px; flex: none; min-height: 22px; }
-.hh svg { width: 14px; height: 14px; }
-.compact .hh { font-size: 13px; padding: 0 18px; gap: 6px; }
+.hh { display: grid; font-size: 14px; padding: 0 20px; margin-top: 10px; flex: none; min-height: 22px; }
+.hh > * { grid-area: 1 / 1; display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; }
+.hh b { flex: none; }
+.hh span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.hh svg { width: 14px; height: 14px; flex: none; }
+.hh .out svg { color: var(--coral); }
+.compact .hh { font-size: 13px; padding: 0 18px; }
+.compact .hh > * { gap: 6px; }
 .hint { margin: 10px 20px 0; font-size: 13px; color: var(--text-2); min-height: 18px; flex: none; }
-.stake { margin: 6px 12px 0; padding: 10px 12px; border-radius: 12px; background: #14171c; box-shadow: inset 0 0 0 1px var(--line); display: flex; gap: 10px; align-items: center; font-size: 13px; line-height: 1.35; flex: none; }
-.stake .a, .w .a { width: 26px; height: 26px; border-radius: 50%; background: var(--surface-3); display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none; }
-.toast { margin: 4px 12px 0; padding: 10px 12px; border-radius: 12px; box-shadow: inset 0 0 0 1.5px var(--coral); display: flex; gap: 10px; align-items: center; font-size: 13px; flex: none; background: var(--bg); }
-.toast svg { width: 18px; height: 18px; flex: none; }
+.w .a { width: 26px; height: 26px; border-radius: 50%; background: var(--surface-3); display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none; }
 .moment { margin: 10px 12px 0; padding: 14px; border-radius: 18px; background: var(--surface-1); display: flex; flex-direction: column; gap: 10px; flex: none; }
 .who { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .w { border-radius: 12px; background: var(--surface-2); padding: 8px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; min-width: 0; }

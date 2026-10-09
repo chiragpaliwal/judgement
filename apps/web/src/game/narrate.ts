@@ -67,46 +67,6 @@ export function hintLine(game: GameView, card: Card, names: string[]): string {
   return `The ${c} won’t beat ${top}. ${who} stays on top.`;
 }
 
-/** What the current turn means for the player who is choosing. */
-export function stakeLine(game: GameView, seat: number, names: string[], voidsBySeat: Suit[][]): { title: string; body: string } {
-  const r = game.round;
-  const name = names[seat];
-  const bid = r.bids[seat] ?? 0;
-  const won = r.won[seat];
-  const plays = currentPlays(game);
-  const led = ledSuit(plays);
-  const trump = r.trump;
-
-  if (isOut(r, seat)) {
-    return { title: `${name} is out.`, body: 'Nothing to lose now, so anything can come down.' };
-  }
-  const n = need(bid, won);
-  if (n === 0) {
-    const title = bid === 0 ? `${name} bid 0.` : `${name} has ${bid}.`;
-    if (!led) return { title, body: `${name} leads and wants to lose this one.` };
-    const best = plays[winningIndex(plays, trump)];
-    const bestName = names[best.seat];
-    let body: string;
-    if (suitOf(best.card) === trump && led !== trump) {
-      body = `${bestName} trumped it, so any ${singular(led)} keeps ${name} clean.`;
-    } else {
-      body = `Any ${singular(led)} under ${poss(bestName)} ${cardLabel(best.card)} keeps ${name} clean.`;
-    }
-    if (voidsBySeat[seat]?.includes(led)) {
-      body = `${name} is out of ${SUIT_NAMES[led]}, so anything but a high ${singular(trump)} is safe.`;
-    } else if (led !== trump) {
-      body += ` Out of ${SUIT_NAMES[led]}, ${name} can throw anything but a ${singular(trump)}.`;
-    }
-    return { title, body };
-  }
-  const title = `${name} needs ${n} more.`;
-  const left = tricksLeft(r);
-  if (!led) return { title, body: `${name} leads, with ${plural(left, 'trick')} left to find ${n}.` };
-  const best = plays[winningIndex(plays, trump)];
-  if (best.seat === seat) return { title, body: `${poss(name)} card is on top. The rest of the table decides.` };
-  return { title, body: `Has to beat ${poss(names[best.seat])} ${cardLabel(best.card)} to take this one.` };
-}
-
 /** One line under "Your hand" while waiting in play. */
 export function waitLine(game: GameView, names: string[]): string {
   const r = game.round;
