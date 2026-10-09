@@ -4,9 +4,11 @@ import { MotionConfig } from 'motion/react';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from './App';
 import { usePrefs } from './lib/prefs';
+import { fitViewport } from './lib/viewport';
 import './styles.css';
 
 registerSW({ immediate: true });
+fitViewport();
 
 function Root() {
   const reduced = usePrefs((s) => s.reducedMotion);

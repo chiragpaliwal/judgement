@@ -23,7 +23,7 @@ function useCompact() {
 
 function Notice({ title, body, action }: { title: string; body: string; action?: { label: string; run: () => void } }) {
   return (
-    <main className="scr" style={{ justifyContent: 'center', padding: '0 20px', gap: 14 }}>
+    <main className="scr" style={{ justifyContent: 'center', paddingInline: 20, gap: 14 }}>
       <h1 style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{title}</h1>
       <p className="dim" style={{ fontSize: 15, lineHeight: 1.45 }}>
         {body}
@@ -69,7 +69,7 @@ export function RoomPage({ code }: { code: string }) {
 
   if (!named) {
     return (
-      <main className="scr" style={{ padding: '0 12px' }}>
+      <main className="scr" style={{ paddingInline: 12 }}>
         <header style={{ padding: '40px 8px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="k">Joining room</div>
           <div className="mono" style={{ fontSize: 52, fontWeight: 500, letterSpacing: '0.14em', lineHeight: 1 }}>

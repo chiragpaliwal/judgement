@@ -85,16 +85,33 @@ export function Table({
   const playing = game.phase === 'playing';
   const ready = size.w > 0;
 
+  // When a held trick is released its cards sweep into the winner; flash the winner's seat as they land.
+  const [took, setTook] = useState<{ seat: number; id: number } | null>(null);
+  const heldWinner = held?.trick.winner ?? null;
+  const lastHeldWinner = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = lastHeldWinner.current;
+    lastHeldWinner.current = heldWinner;
+    if (heldWinner === null && prev !== null) setTook({ seat: prev, id: Date.now() });
+  }, [heldWinner]);
+  useEffect(() => {
+    if (!took) return;
+    const t = setTimeout(() => setTook(null), 1200);
+    return () => clearTimeout(t);
+  }, [took]);
+
   // Slot placeholders: your dashed slot, or the breathing slot of whoever is choosing.
   const slotSeat = playing && mode === 'live' && !room.pause && !plays.some((p) => p.seat === r.turn) ? r.turn : null;
   const winnerPos = winSeat !== null ? pos(winSeat) : L.centre;
+  // Cards gather onto the winning card before flying to the winner.
+  const gatherPos = winSeat !== null ? cardPos(winSeat) : { ...L.centre, rot: 0 };
 
   return (
     <section ref={ref} className={`tbl${n <= 4 || small ? ' small' : ''}`} aria-label="Table">
       <div className={`felt${hookActive ? ' hook' : ''}`} />
       {ready && (
         <>
-          <CenterPill room={room} game={game} names={names} pendingBid={pendingBid} band={L.pill} centre={L.centre} mode={mode} held={!!held} replayWinner={mode === 'replay' ? winSeat : null} />
+          <CenterPill room={room} game={game} names={names} pendingBid={pendingBid} band={L.pill} centre={L.centre} mode={mode} held={!!held} replayWinner={mode !== 'live' ? winSeat : null} />
 
           {slotSeat !== null && (
             <div
@@ -105,34 +122,44 @@ export function Table({
             />
           )}
 
-          <AnimatePresence custom={winnerPos}>
+          <AnimatePresence>
             {plays.map((p, i) => {
               const c = cardPos(p.seat);
               const from = p.seat === me ? { x: L.seats[0].x, y: size.h + 60 } : pos(p.seat);
               const w = compact ? 42 : 46;
               const h = compact ? 58 : 64;
+              const isWin = p.seat === winSeat;
+              // Lift the winning card while the trick is held, so the winner reads before the sweep.
+              const lift = mode === 'held' && isWin && !reduced;
               return (
                 <motion.div
-                  key={`${mode}-${p.card}`}
+                  // Live and held share keys so a trick being won doesn't re-mount its cards.
+                  key={`${mode === 'replay' ? 'replay' : 'live'}-${p.card}`}
                   className="tc"
-                  style={{ left: c.x - w / 2, top: c.y - h / 2, zIndex: 1 + i }}
-                  custom={winnerPos}
+                  style={{ left: c.x - w / 2, top: c.y - h / 2, zIndex: mode === 'held' && isWin ? 20 : 1 + i }}
                   initial={
                     reduced || mode === 'replay'
                       ? { opacity: 0, rotate: c.rot }
                       : { x: from.x - c.x, y: from.y - c.y, scale: p.seat === me ? 1.5 : 0.5, opacity: 0, rotate: c.rot }
                   }
-                  animate={{ x: 0, y: 0, scale: 1, opacity: 1, rotate: c.rot }}
+                  animate={{ x: 0, y: lift ? -6 : 0, scale: lift ? 1.12 : 1, opacity: 1, rotate: c.rot }}
                   exit={
                     mode === 'replay' || reduced
                       ? { opacity: 0, transition: { duration: 0.12 } }
-                      : { x: winnerPos.x - c.x, y: winnerPos.y - c.y, scale: 0.3, opacity: 0, transition: { duration: 0.3, ease: OUT } }
+                      : {
+                          x: [0, gatherPos.x - c.x, winnerPos.x - c.x],
+                          y: [lift ? -6 : 0, gatherPos.y - c.y, winnerPos.y - c.y],
+                          rotate: [c.rot, gatherPos.rot, 0],
+                          scale: [lift ? 1.12 : 1, 1, 0.35],
+                          opacity: [1, 1, 0],
+                          transition: { duration: 0.6, times: [0, 0.4, 1], ease: OUT, delay: isWin ? 0 : 0.03 * i },
+                        }
                   }
                   transition={reduced ? { duration: 0.12 } : { duration: p.seat === me ? 0.26 : 0.22, ease: OUT }}
                   role="img"
                   aria-label={`${names[p.seat]} played ${cardName(p.card)}`}
                 >
-                  <CardFace card={p.card} trump={r.trump} win={p.seat === winSeat} />
+                  <CardFace card={p.card} trump={r.trump} win={isWin} />
                   {i === 0 && <span className="ldtag">led</span>}
                 </motion.div>
               );
@@ -149,6 +176,7 @@ export function Table({
               deadline={s.turn ? room.turnDeadline : null}
               timerTotal={room.settings.turnTimer * 1000}
               reaction={reactions.filter((x) => x.from === s.id).slice(-1)[0] ?? null}
+              took={took?.seat === s.seat ? took.id : null}
               reduced={reduced}
             />
           ))}
@@ -173,6 +201,7 @@ function Seat({
   deadline,
   timerTotal,
   reaction,
+  took,
   reduced,
 }: {
   model: SeatModel;
@@ -183,6 +212,8 @@ function Seat({
   deadline: number | null;
   timerTotal: number;
   reaction: { id: number; emoji: string } | null;
+  /** Set (to a fresh id) as a won trick sweeps into this seat. */
+  took: number | null;
   reduced: boolean;
 }) {
   const r = compact ? 19 : 21;
@@ -234,6 +265,30 @@ function Seat({
               transition={{ duration: 2.4, times: [0, 0.12, 0.75, 1] }}
             >
               {reaction.emoji}
+            </motion.span>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {took !== null && (
+            <motion.span
+              key={`flash-${took}`}
+              className="tookring"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={reduced ? { scale: 1, opacity: [0, 1, 0] } : { scale: [0.8, 1, 1.5], opacity: [0, 1, 0] }}
+              transition={{ duration: 0.7, times: [0, 0.35, 1], delay: reduced ? 0 : 0.3 }}
+              aria-hidden
+            />
+          )}
+          {took !== null && (
+            <motion.span
+              key={`plus-${took}`}
+              className="took"
+              initial={{ x: '-50%', y: 4, opacity: 0 }}
+              animate={{ x: '-50%', y: reduced ? 0 : [4, -4, -4, -12], opacity: [0, 1, 1, 0] }}
+              transition={{ duration: 1, times: [0, 0.2, 0.75, 1], delay: reduced ? 0 : 0.3 }}
+              aria-hidden
+            >
+              +1
             </motion.span>
           )}
         </AnimatePresence>
@@ -322,13 +377,14 @@ function CenterPill({
   const space = band.bottom - band.top;
   const at = (h: number) => ({ left: centre.x, top: placePill(band, centre.y, h) });
 
-  if (mode === 'replay' && replayWinner !== null) {
+  if (mode !== 'live' && replayWinner !== null) {
     const idx = r.tricksDone;
+    const verb = mode === 'held' ? 'take' : 'took';
     const fit = fitLines(['lbl', 'c'], ['lbl'], space);
     return (
       <div className="pill" style={at(fit.h)} aria-live="polite">
         {fit.has('lbl') && <span className="lbl">Trick {idx}</span>}
-        <span className="c even">{names[replayWinner] === 'You' ? 'You took it' : `${names[replayWinner]} took it`}</span>
+        <span className="c even">{names[replayWinner] === 'You' ? `You ${verb} it` : `${names[replayWinner]} ${verb}s it`}</span>
       </div>
     );
   }
