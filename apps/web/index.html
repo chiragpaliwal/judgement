@@ -13,6 +13,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=DM+Mono:wght@400;500&display=swap" />
     <title>Judgement</title>
+    <script>
+      // navigator.standalone exists only on iOS: true when launched from the home screen.
+      // (iOS 26 reports display-mode: standalone as false there, so CSS can't detect it.)
+      if (navigator.standalone) document.documentElement.classList.add('ios-pwa');
+    </script>
   </head>
   <body>
     <div id="root"></div>
