@@ -142,7 +142,13 @@ h1, h2, h3, p { margin: 0; }
 .offl svg { width: 11px; height: 11px; }
 .ring { position: absolute; inset: -6px; pointer-events: none; }
 .ring circle { fill: none; stroke: var(--amber); stroke-width: 2.5; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
-.pips { display: flex; gap: 2px; height: 9px; align-items: center; }
+.seat .lab { display: contents; }
+/* Short tables: the seat straight across puts its name beside the avatar so the pill has room. */
+.seat.side .lab { position: absolute; left: calc(50% + 37px); top: 0; width: max-content; height: 42px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 3px; }
+.seat.side .pips { justify-content: flex-start; max-width: 120px; }
+.compact .seat.side .lab { left: calc(50% + 34px); height: 38px; }
+/* Wraps a long status tag under the pips rather than past the screen edge. */
+.pips { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px 2px; min-height: 9px; max-width: 80px; align-items: center; }
 .pip { width: 7px; height: 7px; border-radius: 2px; display: block; }
 .pip.won { background: var(--blue); }
 .pip.need { box-shadow: inset 0 0 0 1.5px var(--amber); }
@@ -173,6 +179,7 @@ h1, h2, h3, p { margin: 0; }
 .cf { position: relative; width: 100%; height: 100%; border-radius: inherit; background: var(--card); display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; overflow: hidden; }
 .cf .rk { font-family: var(--mono); font-weight: 500; line-height: 1; }
 .cf svg.pip-s { align-self: flex-end; }
+.cf .rk .ix { display: block; width: 0.72em; height: 0.72em; margin-top: 2px; }
 .cf .tn { position: absolute; top: 0; right: 0; width: 0; height: 0; border-top: 14px solid var(--suit-s); border-left: 14px solid transparent; }
 .cf.win { box-shadow: 0 0 0 2px var(--felt-out), 0 0 0 4px var(--blue), 0 6px 14px rgba(0, 0, 0, 0.45); }
 .tc .cf { padding: 5px; box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45); }
@@ -246,28 +253,10 @@ h1, h2, h3, p { margin: 0; }
 .fan.xs .hc .cf svg.pip-s { width: 17px; height: 17px; }
 .fan.xs .hc .cf .tn { border-top-width: 10px; border-left-width: 10px; }
 
-.lanes { display: flex; flex-direction: column; gap: 6px; padding: 0 12px; flex: none; }
-.lane { display: grid; grid-template-columns: 16px repeat(6, minmax(0, 1fr)); gap: 5px; align-items: center; }
-.lane .ls svg { width: 14px; height: 14px; display: block; }
-.lane .cells { grid-column: 2 / -1; display: flex; }
-.lcard { aspect-ratio: 5 / 7; border-radius: 7px; position: relative; padding: 0; transition: transform 0.12s var(--ease-out); }
-.lcard .cf { padding: 5px 5px 4px; }
-.lcard .cf .rk { font-size: 16px; }
-.lcard .cf svg.pip-s { width: 19px; height: 19px; }
-.lcard .cf .tn { border-top-width: 11px; border-left-width: 11px; }
-.lcard.off .cf { filter: brightness(0.42); }
-.lcard.tiny { border-radius: 4px; }
-.lcard.tiny .cf { padding: 2px 3px; border-radius: 4px; }
-.lcard.tiny .cf .rk { font-size: 11px; }
-.lcard.tiny .cf svg.pip-s { width: 10px; height: 10px; }
-.lcard.tiny .cf .tn { border-top-width: 6px; border-left-width: 6px; }
-.lanes.tiny { gap: 3px; }
 .pad.six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .pad.six .bb { height: 46px; }
 .pad.six .bb .v { font-size: 18px; }
 .pad.six .bb .r, .pad.six .bb .r.sh, .pad.six .bb .r.sp, .pad.six .bb .r.ev { font-size: 9px; }
-.lcard.sel { transform: translateY(-4px); }
-.lcard.sel .cf { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--amber); }
 
 .stage { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 4px 20px; flex: none; height: 172px; }
 .compact .stage { height: 160px; }

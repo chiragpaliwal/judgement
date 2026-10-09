@@ -1,12 +1,18 @@
 import { cardName, rankLabel, suitOf, type Card, type Suit } from '@judgement/engine';
 import { SuitIcon } from './icons';
 
-/** Card face: rank top-left (mono), suit bottom-right, trump corner notch. Sized by its container. */
-export function CardFace({ card, trump, win }: { card: Card; trump?: Suit | null; win?: boolean }) {
+/**
+ * Card face: rank top-left (mono), suit bottom-right, trump corner notch. Sized by its container.
+ * `corner` adds a small suit under the rank, for cards whose bottom half is covered.
+ */
+export function CardFace({ card, trump, win, corner }: { card: Card; trump?: Suit | null; win?: boolean; corner?: boolean }) {
   const s = suitOf(card);
   return (
     <span className={`cf s-${s}${win ? ' win' : ''}`}>
-      <span className="rk">{rankLabel(card)}</span>
+      <span className="rk">
+        {rankLabel(card)}
+        {corner && <SuitIcon suit={s} className="ix" />}
+      </span>
       <SuitIcon suit={s} className="pip-s" />
       {trump === s && <i className="tn" />}
     </span>

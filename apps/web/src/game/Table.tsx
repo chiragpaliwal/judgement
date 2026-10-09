@@ -15,7 +15,7 @@ import { CardFace } from '../ui/Card';
 import { Icon } from '../ui/icons';
 import { usePrefs } from '../lib/prefs';
 import { serverNow, useRoom } from '../net/room';
-import { relSeat, tableLayout, type Point } from './geometry';
+import { placePill, relSeat, tableLayout, type Point } from './geometry';
 import { bidNote, joinNames } from './narrate';
 import { buildSeats, seatNames, type SeatModel } from './seats';
 
@@ -59,7 +59,8 @@ export function Table({
   const n = game.n;
   const me = game.me;
   const r = game.round;
-  const L = useMemo(() => tableLayout(n, size.w, size.h, compact), [n, size.w, size.h, compact]);
+  const playingLayout = game.phase !== 'bidding';
+  const L = useMemo(() => tableLayout(n, size.w, size.h, compact, playingLayout), [n, size.w, size.h, compact, playingLayout]);
   const seats = buildSeats(room, game, pendingBid, !!held);
   const names = seatNames(room, game);
   const pos = (seat: number) => L.seats[relSeat(seat, me, n)];
@@ -93,7 +94,7 @@ export function Table({
       <div className={`felt${hookActive ? ' hook' : ''}`} />
       {ready && (
         <>
-          <CenterPill room={room} game={game} names={names} pendingBid={pendingBid} at={L.pill} tight={L.tight} mode={mode} held={!!held} replayWinner={mode === 'replay' ? winSeat : null} />
+          <CenterPill room={room} game={game} names={names} pendingBid={pendingBid} band={L.pill} centre={L.centre} mode={mode} held={!!held} replayWinner={mode === 'replay' ? winSeat : null} />
 
           {slotSeat !== null && (
             <div
@@ -143,6 +144,7 @@ export function Table({
               key={s.id}
               model={s}
               at={pos(s.seat)}
+              side={L.topSide && relSeat(s.seat, me, n) === n / 2}
               compact={compact}
               deadline={s.turn ? room.turnDeadline : null}
               timerTotal={room.settings.turnTimer * 1000}
@@ -166,6 +168,7 @@ export function Table({
 function Seat({
   model: s,
   at,
+  side,
   compact,
   deadline,
   timerTotal,
@@ -174,6 +177,8 @@ function Seat({
 }: {
   model: SeatModel;
   at: Point;
+  /** Name and pips beside the avatar instead of under it (short tables, seat straight across). */
+  side: boolean;
   compact: boolean;
   deadline: number | null;
   timerTotal: number;
@@ -181,7 +186,7 @@ function Seat({
   reduced: boolean;
 }) {
   const r = compact ? 19 : 21;
-  const cls = ['seat', s.me && 'me', s.turn && 'turn', s.alive && 'alive', s.out && 'out', s.away && 'away'].filter(Boolean).join(' ');
+  const cls = ['seat', side && 'side', s.me && 'me', s.turn && 'turn', s.alive && 'alive', s.out && 'out', s.away && 'away'].filter(Boolean).join(' ');
   const label = `${s.name}${s.dealer ? ', dealer' : ''}${s.leads ? ', leads first' : ''}${s.badge.kind === 'need' ? `, needs ${s.badge.text}` : ''}${s.out ? ', out' : ''}${s.tag ? `, ${s.tag.text}` : ''}`;
   return (
     <motion.div
@@ -233,20 +238,22 @@ function Seat({
           )}
         </AnimatePresence>
       </div>
-      <span className="nm">{s.name}</span>
-      <div className="pips">
-        {Array.isArray(s.pips) ? (
-          s.pips.map((p, i) => <i key={i} className={`pip ${p}`} />)
-        ) : (
-          <span className="meter">
-            <i>
-              <b style={{ width: `${(Math.min(s.pips.won, s.pips.bid) / s.pips.bid) * 100}%` }} />
-            </i>
-            {s.pips.won}/{s.pips.bid}
-          </span>
-        )}
-        {s.tag && <span className={`stx ${s.tag.tone === 'blue' ? '' : s.tag.tone === 'dim' ? 'dimt' : s.tag.tone}`}>{s.tag.text}</span>}
-        {s.autoplay && !s.tag && <span className="stx dimt">auto</span>}
+      <div className="lab">
+        <span className="nm">{s.name}</span>
+        <div className="pips">
+          {Array.isArray(s.pips) ? (
+            s.pips.map((p, i) => <i key={i} className={`pip ${p}`} />)
+          ) : (
+            <span className="meter">
+              <i>
+                <b style={{ width: `${(Math.min(s.pips.won, s.pips.bid) / s.pips.bid) * 100}%` }} />
+              </i>
+              {s.pips.won}/{s.pips.bid}
+            </span>
+          )}
+          {s.tag && <span className={`stx ${s.tag.tone === 'blue' ? '' : s.tag.tone === 'dim' ? 'dimt' : s.tag.tone}`}>{s.tag.text}</span>}
+          {s.autoplay && !s.tag && <span className="stx dimt">auto</span>}
+        </div>
       </div>
     </motion.div>
   );
@@ -274,36 +281,53 @@ function TimerRing({ deadline, total, size }: { deadline: number; total: number;
   );
 }
 
+// Approximate line heights of the pill's stack (see .pill in styles.css), for fitting it between seats.
+const LINE_H = { lbl: 13, c: 21, bar: 5, t: 14, dots: 7 };
+type Line = keyof typeof LINE_H;
+
+/** Drops lines in `drop` order until the stack fits `room`; whatever is left in `want` stays. */
+function fitLines(want: Line[], drop: Line[], room: number) {
+  const shown = new Set(want);
+  const height = () => [...shown].reduce((a, k) => a + LINE_H[k], 0) + 4 * (shown.size - 1);
+  for (const k of drop) {
+    if (height() <= room) break;
+    shown.delete(k);
+  }
+  return { has: (k: Line) => shown.has(k), h: height() };
+}
+
 function CenterPill({
   room,
   game,
   names,
   pendingBid,
-  at,
-  tight,
+  band,
+  centre,
   mode,
   held,
   replayWinner,
 }: {
-  tight: boolean;
   room: RoomView;
   game: GameView;
   names: string[];
   pendingBid: number | null;
-  at: Point;
+  band: { top: number; bottom: number };
+  centre: Point;
   mode: 'live' | 'held' | 'replay';
   held: boolean;
   replayWinner: number | null;
 }) {
   const r = game.round;
   const me = game.me;
-  const style = { left: at.x, top: at.y };
+  const space = band.bottom - band.top;
+  const at = (h: number) => ({ left: centre.x, top: placePill(band, centre.y, h) });
 
   if (mode === 'replay' && replayWinner !== null) {
     const idx = r.tricksDone;
+    const fit = fitLines(['lbl', 'c'], ['lbl'], space);
     return (
-      <div className="pill" style={style} aria-live="polite">
-        <span className="lbl">Trick {idx}</span>
+      <div className="pill" style={at(fit.h)} aria-live="polite">
+        {fit.has('lbl') && <span className="lbl">Trick {idx}</span>}
         <span className="c even">{names[replayWinner] === 'You' ? 'You took it' : `${names[replayWinner]} took it`}</span>
       </div>
     );
@@ -337,11 +361,19 @@ function CenterPill({
           ? 'Last round · one trick decides it'
           : bidNote(game, names);
 
+    const showLbl = !lastRound && hook === null && !myTurn;
+    const showBar = r.cards > 1 && segs <= 24;
+    const fit = fitLines(
+      [showLbl && 'lbl', 'c', showBar && 'bar', 't'].filter((k): k is Line => !!k),
+      ['lbl', 't', 'bar'],
+      space,
+    );
+
     return (
-      <div className="pill" style={style} aria-live="polite">
-        {!lastRound && hook === null && !myTurn && <span className="lbl">Bidding</span>}
+      <div className="pill" style={at(fit.h)} aria-live="polite">
+        {fit.has('lbl') && <span className="lbl">Bidding</span>}
         <span className={`c ${chip.cls}`}>{chip.text}</span>
-        {r.cards > 1 && segs <= 24 && (
+        {fit.has('bar') && (
           <span className="mbar" aria-hidden>
             {Array.from({ length: segs }, (_, i) => {
               let c = '';
@@ -353,7 +385,7 @@ function CenterPill({
             })}
           </span>
         )}
-        {!tight && <span className="t">{note}</span>}
+        {fit.has('t') && <span className="t">{note}</span>}
       </div>
     );
   }
@@ -382,26 +414,32 @@ function CenterPill({
           : alive.length === 2
             ? `${joinNames(alive.map((i) => names[i]))} need it`
             : `${alive.length} need it`;
+    const fit = fitLines(r.cards <= 17 ? ['lbl', 'c', 't', 'dots'] : ['lbl', 'c', 't'], ['dots', 't', 'lbl'], space);
     return (
-      <div className="pill" style={style} aria-live="polite">
-        <span className="lbl hot">Last trick</span>
+      <div className="pill" style={at(fit.h)} aria-live="polite">
+        {fit.has('lbl') && <span className="lbl hot">Last trick</span>}
         <span className="c short">{text}</span>
-        <span className="t">
-          {left} left · {needed} needed
-        </span>
-        {r.cards <= 17 && !tight && <span className="dots">{dots}</span>}
+        {fit.has('t') && (
+          <span className="t">
+            {left} left · {needed} needed
+          </span>
+        )}
+        {fit.has('dots') && <span className="dots">{dots}</span>}
       </div>
     );
   }
 
   const chip = bal > 0 ? { t: `${bal} short`, c: 'short' } : bal < 0 ? { t: `${-bal} spare`, c: 'spare' } : { t: 'even', c: 'even' };
+  const fit = fitLines(r.cards <= 17 ? ['c', 't', 'dots'] : ['c', 't'], ['dots', 't'], space);
   return (
-    <div className="pill" style={style} aria-live="polite">
+    <div className="pill" style={at(fit.h)} aria-live="polite">
       <span className={`c ${chip.c}`}>{chip.t}</span>
-      <span className="t">
-        {left} left · {needed} needed
-      </span>
-      {r.cards <= 17 && !tight && <span className="dots">{dots}</span>}
+      {fit.has('t') && (
+        <span className="t">
+          {left} left · {needed} needed
+        </span>
+      )}
+      {fit.has('dots') && <span className="dots">{dots}</span>}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useRoom } from '../net/room';
 import { Icon } from '../ui/icons';
 import { initialOf } from '../game/seats';
 import { MenuSheet } from './MenuSheet';
+import { copyText, shareOrCopy } from '../lib/share';
 
 /** 01 · Lobby. */
 export function Lobby({ room }: { room: RoomView }) {
@@ -23,22 +24,18 @@ export function Lobby({ room }: { room: RoomView }) {
 
   const startNote = st.startCards >= max ? `Full deck · ${eff} → 1, ${eff} rounds` : `${eff} → 1, ${eff} rounds`;
 
+  const flash = () => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1400);
+  };
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
-    } catch {
-      /* ignore */
-    }
+    if (await copyText(link)) flash();
+    else window.prompt('Copy this link', link);
   };
   const share = async () => {
-    try {
-      if (navigator.share) await navigator.share({ title: 'Judgement', text: `Join my Judgement table · room ${room.code}`, url: link });
-      else await copy();
-    } catch {
-      /* cancelled */
-    }
+    const r = await shareOrCopy({ title: 'Judgement', text: `Join my Judgement table · room ${room.code}`, url: link });
+    if (r === 'copied') flash();
+    else if (r === 'failed') window.prompt('Copy this link', link);
   };
 
   return (
@@ -65,7 +62,7 @@ export function Lobby({ room }: { room: RoomView }) {
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn amber" style={{ flex: 1, height: 48, borderRadius: 12, fontSize: 15 }} onClick={share}>
               <Icon.Share size={18} />
-              Share invite
+              {copied ? 'Link copied' : 'Share invite'}
             </button>
             <button className="btn surf2" style={{ width: 48, height: 48, borderRadius: 12, padding: 0 }} aria-label="Copy link" onClick={copy}>
               {copied ? <Icon.Check size={20} /> : <Icon.Copy size={20} />}

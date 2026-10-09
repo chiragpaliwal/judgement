@@ -1,10 +1,9 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { motion } from 'motion/react';
-import { suitOf, suitOrder, type Card, type Suit } from '@judgement/engine';
+import type { Card, Suit } from '@judgement/engine';
 import { CardFace, cardAria } from '../ui/Card';
-import { SuitIcon } from '../ui/icons';
 import { usePrefs } from '../lib/prefs';
-import { fanLayout } from './geometry';
+import { fanLayout, needsTiers, tierLayout } from './geometry';
 
 const OUT = [0.2, 0.8, 0.2, 1] as const;
 
@@ -41,8 +40,13 @@ export function Fan({ cards, trump, legal, selected, onSelect, size, dimmed, dea
   const reduced = usePrefs((s) => s.reducedMotion);
   const dealing = useDealing(dealKey, cards.length);
   const w = size === 'lg' ? 70 : size === 'sm' ? 60 : 50;
-  const layout = fanLayout(cards.length, width, w);
-  const h = height ?? (size === 'lg' ? 140 : size === 'sm' ? 112 : 104);
+  const ch = size === 'lg' ? 98 : size === 'sm' ? 84 : 70;
+  // Too many cards for one readable fan (13-card rounds): two rows, every card still in view.
+  const tiers = needsTiers(cards.length, width, w);
+  const layout = tiers ? tierLayout(cards.length, width, w, ch) : fanLayout(cards.length, width, w);
+  // The arc's outer cards sag and tilt below the baseline; lift the fan so they stay inside it.
+  const sink = Math.ceil(Math.max(0, ...layout.map((f) => f.drop + (w / 2) * Math.sin((Math.abs(f.rot) * Math.PI) / 180))));
+  const h = (height ?? (size === 'lg' ? 140 : size === 'sm' ? 112 : 104)) + (tiers ? Math.round(ch / 2) : 0) + sink;
   const stagger = dealStagger(cards.length);
 
   return (
@@ -63,7 +67,7 @@ export function Fan({ cards, trump, legal, selected, onSelect, size, dimmed, dea
             <motion.button
               key={`${dealKey}-${c}`}
               className={`hc${interactive && !ok ? ' off' : ''}${sel ? ' sel' : ''}${dimmed ? ' dimmed' : ''}`}
-              style={{ left: f.x, zIndex: i }}
+              style={{ left: f.x, bottom: 4 + sink, zIndex: i }}
               initial={reduced ? { opacity: 0, y: f.drop, rotate: f.rot } : { y: -320, opacity: 0, rotate: f.rot - 20, rotateY: 90 }}
               animate={{ y: f.drop - lift, opacity: 1, rotate: f.rot, rotateY: 0 }}
               transition={transition}
@@ -72,7 +76,7 @@ export function Fan({ cards, trump, legal, selected, onSelect, size, dimmed, dea
               aria-label={cardAria(c, trump)}
               aria-pressed={interactive ? sel : undefined}
             >
-              <CardFace card={c} trump={trump} />
+              <CardFace card={c} trump={trump} corner />
             </motion.button>
           );
         })}
@@ -91,54 +95,6 @@ function useDealing(dealKey: number, n: number) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dealKey]);
   return dealing;
-}
-
-/** Hands of more than 12 cards: four suit rows, trump first (DESIGN_SPEC §4.7). */
-export function Lanes({ cards, trump, legal, selected, onSelect, dealKey, size }: HandProps) {
-  const [ref, width] = useWidth<HTMLDivElement>();
-  const order = suitOrder(trump).filter((s) => cards.some((c) => suitOf(c) === s));
-  const gap = 5;
-  // 'xs' = glance mode while bidding: small cards so the bid pad fits.
-  const cw = width > 0 ? (size === 'xs' ? Math.min(28, (width - 16 - gap * 12) / 13) : (width - 16 - gap * 6) / 6) : 0;
-  return (
-    <div ref={ref} className={`lanes${size === 'xs' ? ' tiny' : ''}`} aria-label="Your hand">
-      {width > 0 &&
-        order.map((s) => {
-          const row = cards.filter((c) => suitOf(c) === s);
-          const rowW = width - 16 - gap;
-          const step = row.length > 1 ? Math.min(cw + (size === 'xs' ? 3 : gap), (rowW - cw) / (row.length - 1)) : 0;
-          return (
-            <div key={s} style={{ display: 'flex', alignItems: 'center', gap: size === 'xs' ? 3 : gap }}>
-              <span className="ls" style={{ width: 16, flex: 'none' }}>
-                <SuitIcon suit={s} dark style={{ width: 14, height: 14, display: 'block' }} />
-              </span>
-              <div style={{ position: 'relative', flex: 1, height: cw * 1.4 }}>
-                {row.map((c, i) => {
-                  const interactive = legal !== null;
-                  const ok = !interactive || legal.includes(c);
-                  return (
-                    <motion.button
-                      key={`${dealKey}-${c}`}
-                      className={`lcard${size === 'xs' ? ' tiny' : ''}${interactive && !ok ? ' off' : ''}${selected === c ? ' sel' : ''}`}
-                      style={{ position: 'absolute', left: i * step, width: cw, zIndex: i }}
-                      initial={{ opacity: 0, y: -20 }}
-                      animate={{ opacity: 1, y: selected === c ? -4 : 0 }}
-                      transition={{ duration: 0.2, delay: selected ? 0 : i * 0.02 }}
-                      disabled={!interactive || !ok}
-                      onClick={() => onSelect?.(c)}
-                      aria-label={cardAria(c, trump)}
-                      aria-pressed={interactive ? selected === c : undefined}
-                    >
-                      <CardFace card={c} trump={trump} />
-                    </motion.button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-    </div>
-  );
 }
 
 /** 1-card round: one big card with a plain caption. */

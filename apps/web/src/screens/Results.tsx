@@ -6,6 +6,7 @@ import { initialOf, seatNames } from '../game/seats';
 import { cap, joinNames, storyLine } from '../game/narrate';
 import { rankOrder, Scoreboard } from './Scoreboard';
 import { Icon } from '../ui/icons';
+import { shareOrCopy } from '../lib/share';
 
 const OUT = [0.2, 0.8, 0.2, 1] as const;
 
@@ -36,16 +37,11 @@ export function Results({ room, game }: { room: RoomView; game: GameView }) {
   const share = async () => {
     const lines = order.map((s) => `${rank(s)}. ${room.members[s].name} ${game.totals[s]}`).join('\n');
     const text = `Judgement · ${rounds} rounds\n${lines}`;
-    try {
-      if (navigator.share) await navigator.share({ title: 'Judgement results', text });
-      else {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1600);
-      }
-    } catch {
-      /* cancelled */
-    }
+    const r = await shareOrCopy({ title: 'Judgement results', text });
+    if (r === 'copied') {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } else if (r === 'failed') window.prompt('Copy your results', text);
   };
 
   return (

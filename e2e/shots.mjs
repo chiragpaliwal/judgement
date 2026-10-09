@@ -138,12 +138,28 @@ while (Date.now() < deadline) {
     await page.getByRole('button', { name: /^Bid \d+/ }).click();
     continue;
   }
-  const hand = page.locator('section.fan button.hc:not([disabled]), .lanes button.lcard:not([disabled]), button.hero:not([disabled])');
+  const hand = page.locator('section.fan button.hc:not([disabled]), button.hero:not([disabled])');
   const playable = await hand.count();
   const pickVisible = await page.getByRole('button', { name: /^Pick a card/ }).isVisible().catch(() => false);
   if (playable > 0 && pickVisible) {
     await page.waitForTimeout(300);
-    await hand.nth(playable - 1).click({ position: { x: 10, y: 24 } });
+    // Fanned and two-row hands tilt and overlap cards: click a point that actually hits this one.
+    // Re-measured on each try, since the hand may still be settling from the last play.
+    const target = hand.nth(playable - 1);
+    for (let tries = 0; ; tries++) {
+      const pt = await target.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        for (let y = r.top + 8; y < r.bottom; y += 6)
+          for (let x = r.left + 4; x < r.right; x += 4) if (el.contains(document.elementFromPoint(x, y))) return { x: x - r.left, y: y - r.top };
+        return null;
+      });
+      try {
+        await target.click({ ...(pt ? { position: pt } : {}), timeout: 2000 });
+        break;
+      } catch (e) {
+        if (tries >= 4) throw e;
+      }
+    }
     await page.waitForTimeout(250);
     if (!seen.has('play-turn') || Math.random() < 0.15) {
       seen.add('play-turn');

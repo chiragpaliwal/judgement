@@ -14,7 +14,7 @@ import {
   type RoomView,
 } from '@judgement/engine';
 import { Table } from '../game/Table';
-import { Fan, Hero, Lanes } from '../game/Hand';
+import { Fan, Hero } from '../game/Hand';
 import { BidSheet, FactChips } from '../game/BidSheet';
 import { heroCaption, hintLine, lastTrickHeadline, stakeLine, turnHeader, waitLine } from '../game/narrate';
 import { initialOf, seatNames } from '../game/seats';
@@ -186,7 +186,6 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
       dealKey,
     };
     if (hand.length === 1 && opts.caption) return <Hero {...common} card={hand[0]} caption={opts.caption} />;
-    if (hand.length > 12) return <Lanes {...common} size={opts.size} />;
     const size = compact && opts.size === 'lg' ? 'sm' : compact && opts.size === 'sm' ? 'xs' : opts.size;
     return <Fan {...common} size={size} dimmed={opts.dimmed} height={opts.height} />;
   };
@@ -246,7 +245,7 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
     lower = (
       <>
         {hand.length === 1 ? null : <FactChips game={game} names={names} wrapClass="pad12" />}
-        <div style={{ paddingTop: 10 }}>{handView({ interactive: false, size: 'lg', caption: heroCap })}</div>
+        <div style={{ paddingTop: 10 }}>{handView({ interactive: false, size: hand.length > 8 ? 'sm' : 'lg', caption: heroCap })}</div>
       </>
     );
     dock = (
