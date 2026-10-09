@@ -13,6 +13,11 @@ const SWEEP_MS = 10_000;
 const PING = 'ping';
 const PONG = 'pong';
 
+/** One JSON line per connection event, for Workers Logs (observability is on in wrangler.jsonc). */
+function log(event: string, fields: Record<string, unknown>) {
+  console.log(JSON.stringify({ event, ...fields }));
+}
+
 export class Room extends Server<Env> {
   static override options = { hibernate: true };
   core: RoomCore | null = null;
@@ -45,6 +50,16 @@ export class Room extends Server<Env> {
     const url = new URL(ctx.request.url);
     const deviceId = url.searchParams.get('deviceId') ?? '';
     const name = url.searchParams.get('name') ?? '';
+    log('connect', {
+      room: this.name,
+      conn: conn.id,
+      // Sent by the client: why it (re)connected, how many times this page has, and the last state it saw.
+      reason: url.searchParams.get('reason'),
+      attempt: url.searchParams.get('attempt'),
+      since: url.searchParams.get('since'),
+      seq: this.core?.s.seq ?? null,
+      colo: (ctx.request.cf as { colo?: string } | undefined)?.colo ?? null,
+    });
     conn.setState({ playerId: null, seen: Date.now() });
     if (!this.core) {
       this.send(conn, { type: 'no_room' });
@@ -102,8 +117,9 @@ export class Room extends Server<Env> {
     if (out.changed) await this.commit(out.events);
   }
 
-  override async onClose(conn: Connection<ConnState>) {
+  override async onClose(conn: Connection<ConnState>, code: number, reason: string) {
     const playerId = conn.state?.playerId;
+    log('close', { room: this.name, conn: conn.id, player: playerId ?? null, code, reason, quietMs: Date.now() - this.lastSeen(conn) });
     if (!playerId || !this.core) return;
     const stillHere = [...this.getConnections<ConnState>()].some(
       (c) => c.id !== conn.id && c.state?.playerId === playerId,
@@ -123,6 +139,9 @@ export class Room extends Server<Env> {
       this.core = null;
       return;
     }
+    // How late the alarm ran relative to what it was set for (bot move, deal, grace…).
+    const due = this.core.nextWake();
+    if (due !== null && now - due > 250) log('alarm_late', { room: this.name, lateMs: now - due });
     const before = JSON.stringify(this.core.s);
     const swept = this.sweep(now);
     const events = this.core.tick(now);
@@ -140,14 +159,11 @@ export class Room extends Server<Env> {
     const core = this.core;
     if (!core || !this.watching()) return false;
     const conns = [...this.getConnections<ConnState>()];
-    const lastSeen = (c: Connection<ConnState>) => {
-      const pong = this.ctx.getWebSocketAutoResponseTimestamp(c as unknown as WebSocket)?.getTime() ?? 0;
-      return Math.max(pong, c.state?.seen ?? 0);
-    };
-    const stale = conns.filter((c) => c.state?.playerId && now - lastSeen(c) > STALE_MS);
+    const stale = conns.filter((c) => c.state?.playerId && now - this.lastSeen(c) > STALE_MS);
     let changed = false;
     for (const c of stale) {
       const pid = c.state!.playerId!;
+      log('sweep', { room: this.name, conn: c.id, player: pid, quietMs: now - this.lastSeen(c), autoPong: this.autoPongAt(c) });
       c.setState({ playerId: null, seen: c.state!.seen });
       try {
         c.close(4100, 'stale');
@@ -161,6 +177,20 @@ export class Room extends Server<Env> {
       }
     }
     return changed;
+  }
+
+  /** Last time the runtime answered a ping on this socket for us, or null if it never has. */
+  private autoPongAt(c: Connection): number | null {
+    try {
+      return this.ctx.getWebSocketAutoResponseTimestamp(c as unknown as WebSocket)?.getTime() ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Last sign of life on a socket: an auto-answered ping, or anything that reached onMessage. */
+  private lastSeen(c: Connection<ConnState>): number {
+    return Math.max(this.autoPongAt(c) ?? 0, c.state?.seen ?? 0);
   }
 
   /** Whether a running game needs its sockets checked for liveness. */
@@ -185,12 +215,13 @@ export class Room extends Server<Env> {
   private async commit(events: GameEvent[]) {
     const core = this.core;
     if (!core) return;
+    const seq = (core.s.seq = (core.s.seq ?? 0) + 1);
     await this.ctx.storage.put('room', core.s);
     const now = Date.now();
     for (const c of this.getConnections<ConnState>()) {
       const pid = c.state?.playerId ?? null;
       if (!pid) continue;
-      this.send(c, { type: 'state', room: core.roomView(pid, now), game: core.gameView(pid), events });
+      this.send(c, { type: 'state', seq, room: core.roomView(pid, now), game: core.gameView(pid), events });
     }
     await this.schedule(now);
   }

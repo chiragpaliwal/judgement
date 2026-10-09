@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { legalBids, legalCards, ledSuit, openTrick, type ClientMsg } from '@judgement/engine';
+import { GRACE_MS, HOLD_MS, legalBids, legalCards, ledSuit, openTrick, type ClientMsg } from '@judgement/engine';
 import { newRoomState, RoomCore } from './core';
 
 function seeded(seed = 1) {
@@ -92,7 +92,7 @@ describe('RoomCore', () => {
     t.send(t.host, { type: 'start' });
     const victim = t.ids[2];
     t.core.disconnect(victim, t.now);
-    t.advance(4_000);
+    t.advance(GRACE_MS - 1_000);
     expect(t.core.s.pause).toBeNull();
     t.advance(1_500);
     expect(t.core.s.pause?.playerId).toBe(victim);
@@ -121,7 +121,7 @@ describe('RoomCore', () => {
     const t = setup(3, 0);
     t.send(t.host, { type: 'start' });
     t.core.disconnect(t.host, t.now);
-    t.advance(6_000);
+    t.advance(GRACE_MS + 1_000);
     expect(t.core.s.pause?.playerId).toBe(t.host);
     t.advance(61_000);
     expect(t.core.s.hostId).not.toBe(t.host);
@@ -146,7 +146,9 @@ describe('RoomCore', () => {
     const actor = t.core.s.game!.round.turn;
     const other = t.ids[(actor + 1) % 3];
     t.core.disconnect(other, t.now);
-    t.advance(5_000);
+    t.advance(GRACE_MS - 1);
+    expect(t.core.s.pause).toBeNull();
+    t.advance(1);
     expect(t.core.s.pause).not.toBeNull();
     const remaining = t.core.s.turnRemaining!;
     expect(remaining).toBe(deadline - t.now);
@@ -154,6 +156,18 @@ describe('RoomCore', () => {
     t.core.join(`device-${(actor + 1) % 3}-xxxxxxxx`, 'back', t.now);
     t.advance(0);
     expect(t.core.s.turnDeadline).toBe(t.now + remaining);
+  });
+
+  it('stops waking up for a host hold when nobody could take over', () => {
+    const t = setup(1, 2);
+    t.send(t.host, { type: 'start' });
+    t.core.disconnect(t.host, t.now);
+    t.advance(GRACE_MS);
+    expect(t.core.s.pause).not.toBeNull();
+    t.advance(HOLD_MS);
+    expect(t.core.s.pause!.expired).toBe(true);
+    const wake = t.core.nextWake();
+    expect(wake === null || wake > t.now).toBe(true);
   });
 
   it('auto-deals after the round summary countdown', () => {

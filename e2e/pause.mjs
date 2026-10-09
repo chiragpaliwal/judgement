@@ -24,7 +24,7 @@ await page.getByRole('button', { name: /^Deal/ }).click();
 await page.waitForTimeout(1500);
 a.close();
 console.log('Ben disconnected');
-await page.waitForTimeout(6500);
+await page.waitForTimeout(11_500); // GRACE_MS (10s) + slack
 const visible = await page.getByRole('alertdialog').isVisible();
 console.log('pause panel visible:', visible);
 await page.screenshot({ path: `${out}/1-paused.png` });

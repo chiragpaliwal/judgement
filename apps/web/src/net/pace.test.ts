@@ -24,7 +24,12 @@ describe('nextGap', () => {
   });
   it('speeds up when updates pile up or are stale', () => {
     expect(nextGap([bid], CATCH_UP_BACKLOG + 1, 0, HOLD)).toBe(150);
-    expect(nextGap([won], 1, CATCH_UP_AGE_MS + 1, HOLD)).toBe(150);
+    expect(nextGap([dealt], CATCH_UP_BACKLOG + 1, 0, HOLD)).toBe(450);
+  });
+  it('still lets a card land and a won trick show while catching up', () => {
+    expect(nextGap([play], CATCH_UP_BACKLOG + 1, 0, HOLD)).toBe(300);
+    expect(nextGap([play, won], 1, CATCH_UP_AGE_MS + 1, HOLD)).toBe(500);
+    expect(nextGap([won], 1, CATCH_UP_AGE_MS + 1, 200)).toBe(200);
   });
   it('skips the replay entirely after a long stall', () => {
     expect(nextGap([bid], FLUSH_BACKLOG + 1, 0, HOLD)).toBe(0);

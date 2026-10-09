@@ -6,8 +6,16 @@ const GAP_MS: Partial<Record<GameEvent['type'], number>> = {
   play: 450,
   dealt: 900,
 };
-/** Once updates pile up, play them back faster so the table catches up. */
-const CATCH_UP_MS = 150;
+/**
+ * Once updates pile up, play them back faster so the table catches up, but never so fast that a
+ * card is replaced before it lands (~250ms flight) or a won trick vanishes before it registers.
+ */
+const CATCH_UP_MS: Partial<Record<GameEvent['type'], number>> = {
+  bid: 150,
+  play: 300,
+  trickWon: 500,
+  dealt: 450,
+};
 export const CATCH_UP_BACKLOG = 3;
 export const CATCH_UP_AGE_MS = 3_000;
 /** Beyond this the replay isn't worth watching: show the latest state straight away. */
@@ -25,9 +33,11 @@ export const FLUSH_BACKLOG = 12;
  */
 export function nextGap(events: GameEvent[], backlog: number, oldestAgeMs: number, trickHoldMs: number): number {
   if (backlog > FLUSH_BACKLOG) return 0;
+  const catchUp = backlog > CATCH_UP_BACKLOG || oldestAgeMs > CATCH_UP_AGE_MS;
   let gap = 0;
-  for (const e of events) gap = Math.max(gap, e.type === 'trickWon' ? trickHoldMs : (GAP_MS[e.type] ?? 0));
-  if (gap === 0) return 0;
-  if (backlog > CATCH_UP_BACKLOG || oldestAgeMs > CATCH_UP_AGE_MS) return Math.min(gap, CATCH_UP_MS);
+  for (const e of events) {
+    const full = e.type === 'trickWon' ? trickHoldMs : (GAP_MS[e.type] ?? 0);
+    gap = Math.max(gap, catchUp ? Math.min(full, CATCH_UP_MS[e.type] ?? 0) : full);
+  }
   return gap;
 }

@@ -60,6 +60,8 @@ export interface RoomState {
   endedEarly: boolean;
   nextFirstDealer: number;
   lastActivity: number;
+  /** Number of the last state broadcast (see ServerMsg `seq`). Missing in rooms saved before it existed. */
+  seq?: number;
 }
 
 export interface Outcome {
@@ -96,6 +98,7 @@ export function newRoomState(code: string, now: number): RoomState {
     endedEarly: false,
     nextFirstDealer: 0,
     lastActivity: now,
+    seq: 0,
   };
 }
 
@@ -476,7 +479,10 @@ export class RoomCore {
     const s = this.s;
     const times: number[] = [];
     const h = this.member(s.hostId);
-    if (h && !h.connected && h.offlineSince !== null) times.push(h.offlineSince + HOLD_MS);
+    // Only worth waking for if someone could take over; otherwise this time stays in the past and
+    // the alarm would fire over and over. A player connecting later triggers the transfer anyway.
+    const heir = s.members.some((m) => !m.isBot && m.connected && m.id !== s.hostId);
+    if (h && !h.connected && h.offlineSince !== null && heir) times.push(h.offlineSince + HOLD_MS);
     if (s.stage === 'game' && s.game?.phase === 'roundEnd' && s.autoDealAt !== null) times.push(s.autoDealAt);
     if (this.gameActive()) {
       if (s.pause) {

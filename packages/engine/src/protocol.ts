@@ -6,7 +6,8 @@ import type { GameView } from './view';
 export const REACTIONS = ['😂', '😬', '🔥', '👏', '😭', '🫡', '😴'] as const;
 export type Reaction = (typeof REACTIONS)[number];
 
-export const GRACE_MS = 5_000;
+/** Offline this long before the table pauses; long enough to ride out one reconnect on a phone. */
+export const GRACE_MS = 10_000;
 export const HOLD_MS = 60_000;
 /** Next round deals this long after the first Ready... */
 export const READY_DEAL_MS = 8_000;
@@ -54,7 +55,8 @@ export interface RoomView {
 }
 
 export type ServerMsg =
-  | { type: 'state'; room: RoomView; game: GameView | null; events: GameEvent[] }
+  /** `seq` goes up by one with every state the room sends, so a client can tell whether it missed any. */
+  | { type: 'state'; seq: number; room: RoomView; game: GameView | null; events: GameEvent[] }
   | { type: 'reaction'; from: string; emoji: Reaction }
   | { type: 'error'; code: string }
   | { type: 'locked'; reason: 'in_progress' | 'full' }

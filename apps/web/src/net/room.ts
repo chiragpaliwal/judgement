@@ -57,10 +57,14 @@ interface RoomStore {
 
 let socket: PartySocket | null = null;
 let heart: Heartbeat | null = null;
-let fresh = true;
 let heldTimer: ReturnType<typeof setTimeout> | null = null;
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let seq = 0;
+/** `seq` of the last state received, sent on reconnect so the server can log how much was missed. */
+let lastSeq = 0;
+/** Connection attempts on this page, and what dropped the last open socket; both go to the server's logs. */
+let attempt = 0;
+let dropReason: string | null = null;
 
 /** Hold 400ms, winner ring pulse, then cards fold into the winner (DESIGN_SPEC §7). */
 export const TRICK_HOLD_MS = 1000;
@@ -84,22 +88,38 @@ export const useRoom = create<RoomStore>((set, get) => ({
     heart?.stop();
     resetQueue();
     set({ code, status: 'connecting', issue: null, room: null, game: null, held: null, toast: null });
+    attempt = 0;
+    dropReason = null;
     const ws = new PartySocket({
       host: location.host,
       party: 'room',
       room: code,
-      query: () => ({ deviceId: deviceId(), name: getName() }),
+      query: () => {
+        attempt++;
+        return { deviceId: deviceId(), name: getName(), reason: dropReason ?? 'initial', attempt: String(attempt), since: String(lastSeq) };
+      },
       maxRetries: Infinity,
+      // partysocket's defaults wait 3s before the second try and back off to 10s, and a socket must stay
+      // up 5s before that resets. On a phone that drops now and then, that showed "Reconnecting…" for
+      // seconds at a time and let the room pause the table. Retry quickly instead.
+      minReconnectionDelay: 250,
+      maxReconnectionDelay: 3_000,
+      reconnectionDelayGrowFactor: 1.5,
+      minUptime: 2_000,
+      // A handshake to a far-off data center over weak Wi-Fi can take longer than the default 4s.
+      connectionTimeout: 8_000,
     });
     socket = ws;
     heart = heartbeat(ws);
     ws.addEventListener('open', () => {
       if (socket !== ws) return;
-      fresh = true;
+      dropReason = null;
       set({ status: 'open' });
     });
     ws.addEventListener('close', (e: CloseEvent) => {
       if (socket !== ws) return;
+      // Keep the first cause until a socket opens again; failed retries close too.
+      dropReason ??= `close-${typeof e.code === 'number' ? e.code : '?'}${typeof e.reason === 'string' && e.reason ? `:${e.reason}` : ''}`;
       if (e.code >= 4000 && e.code < 4100) {
         ws.close();
         socket = null;
@@ -151,9 +171,12 @@ const PONG = 'pong';
 const PING_ACTIVE_MS = 1_000;
 /** Beat in the background, where browsers throttle timers anyway. */
 const PING_IDLE_MS = 10_000;
-const PONG_TIMEOUT_MS = 4_000;
-/** A socket is declared dead after this many pings and PONG_TIMEOUT_MS with nothing back. */
-const MAX_MISSES = 2;
+/**
+ * A socket is declared dead after this many pings and PONG_TIMEOUT_MS with nothing back. Phone radios
+ * can hold incoming frames for several seconds; reconnecting over that costs more than it saves.
+ */
+const PONG_TIMEOUT_MS = 8_000;
+const MAX_MISSES = 3;
 const NUDGE_MS = 250;
 
 interface Heartbeat {
@@ -202,6 +225,7 @@ function heartbeat(ws: PartySocket): Heartbeat {
     if (waitingSince === null || ws.readyState !== WebSocket.OPEN) return;
     if (unanswered >= MAX_MISSES) {
       onRx();
+      dropReason ??= 'heartbeat';
       ws.reconnect();
     } else ping();
   };
@@ -273,6 +297,7 @@ function onMessage(msg: ServerMsg) {
       return;
     }
     case 'state':
+      lastSeq = msg.seq ?? 0;
       enqueue({ room: msg.room, game: msg.game, events: msg.events, at: Date.now() });
   }
 }
@@ -294,19 +319,19 @@ function resetQueue() {
   if (pumpTimer) clearTimeout(pumpTimer);
   pumpTimer = null;
   busyUntil = 0;
-  fresh = true;
+  lastSeq = 0;
 }
 
 /**
  * Show server states one at a time, giving each move time to animate. A slow link can deliver
  * several states at once; applied together they render as one jump with no animation.
+ *
+ * The first state on a reconnected socket is a full snapshot. It goes to the back of the queue like
+ * any other: whatever is already queued is older and still worth animating, and if nothing was missed
+ * while the socket was down the snapshot is simply the next state. If states were missed, the table
+ * jumps, but only once the move on screen has finished.
  */
 function enqueue(item: Queued) {
-  if (fresh) {
-    // First state on a (re)connected socket is a full snapshot: it supersedes anything queued.
-    resetQueue();
-    fresh = false;
-  }
   queue.push(item);
   if (!pumpTimer) pump();
 }
