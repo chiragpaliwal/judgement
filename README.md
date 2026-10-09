@@ -1,49 +1,28 @@
 # Judgement
 
-Judgement (Kachuful / Oh Hell) is an online card game where you call exactly how many tricks you'll take. It's for 3 to 7 friends, who join with one link. It runs mobile-first in the browser and installs as an app.
+**Play now: https://judgement.chiragpaliwal.com**
 
-- Rules and product decisions are in [docs/GDD.md](docs/GDD.md).
-- UI and UX follow the design spec (kept locally, not in the repo).
+Judgement (also known as Kachuful or Oh Hell) is a free online card game where you call exactly how many tricks you'll take, then try to hit that number. It's for 3 to 7 friends, who join with one link. There's no sign-up. It runs mobile-first in the browser and installs as an app on your phone.
 
-## Run it locally
+## How to play
 
-You need Node 22 or later and pnpm 10 or later.
+1. Open the site, enter a name, and create a room.
+2. Share the room link or 4-character code. Empty seats can be filled with bots.
+3. Once at least 3 players are in, the host deals.
+4. Each round, everyone bids how many tricks they'll win. Trump rotates ♥ ♠ ♦ ♣, and the cards dealt count down to 1.
+5. Hit your bid exactly and you score 10 + your bid. Miss and you score 0. The highest total wins.
 
-```sh
-pnpm install
-pnpm dev
-```
+Full rules, room behaviour and design decisions are in [docs/GDD.md](docs/GDD.md).
 
-- `pnpm dev` starts Vite on http://localhost:5173 and the Worker on http://localhost:8787.
-- Open http://localhost:5173, create a room, and open the room link in more windows (or tap **Add bot**). You need 3 players to deal.
-- To test a production build, run `pnpm build`, then `cd apps/server && npx wrangler dev`, then open http://localhost:8787.
+## Features
 
-## Checks
+- Rooms for 3 to 7 players with bots, a host-set turn timer and an optional card tracker
+- Reconnects you to your seat after a dropped connection, and pauses the game for everyone while you're away
+- Emoji reactions and one-tap rematches
+- Installable PWA, built for one-handed portrait play
 
-```sh
-pnpm typecheck
-pnpm test          # engine rules + 60 random full games, room server logic, UI geometry/narration
-pnpm sim           # 3 socket players + 1 bot play a whole game against a running server (:8787)
-pnpm e2e:shots out 390 844 2 3 4   # real browser + 2 socket players + 3 bots; screenshots every state
-pnpm e2e:pause out                 # disconnect → pause panel → vote → reconnect
-```
+## Built with
 
-The e2e scripts use your installed Google Chrome through Playwright.
+TypeScript, React, Vite, and Cloudflare Workers with Durable Objects (one per room, over WebSockets). The game rules live in a pure, tested TypeScript engine shared by the client and server.
 
-## Deploy (Cloudflare free plan)
-
-```sh
-cd apps/server && npx wrangler login    # once
-pnpm deploy                              # builds the web app and deploys the Worker + Durable Object
-```
-
-The app is served at `https://judgement.<your-subdomain>.workers.dev`. To deploy automatically from GitHub, add a `CLOUDFLARE_API_TOKEN` secret. CI deploys every push to `main` (see `.github/workflows/ci.yml`).
-
-## Layout
-
-```
-packages/engine   rules, bots, derived values, protocol types (pure TS, tested)
-apps/server       Worker entry + Room Durable Object (partyserver)
-apps/web          React client (screens/, game/, net/, lib/, ui/)
-e2e/              browser-driven scripts
-```
+Want to run or hack on it? See [docs/DEVELOPING.md](docs/DEVELOPING.md).
