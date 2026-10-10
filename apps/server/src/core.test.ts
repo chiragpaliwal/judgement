@@ -195,16 +195,21 @@ describe('RoomCore', () => {
     expect(t.core.s.game!.phase).toBe('bidding');
   });
 
-  it('rematch returns to lobby and rotates the first dealer', () => {
+  it('rematch returns to lobby and picks a random first dealer each game', () => {
     const t = setup(1, 2);
     t.send(t.host, { type: 'setSettings', startCards: 1 });
-    t.send(t.host, { type: 'start' });
-    const first = t.core.s.game!.round.dealer;
-    runToEnd(t);
-    t.send(t.host, { type: 'rematch' });
-    expect(t.core.s.stage).toBe('lobby');
-    t.send(t.host, { type: 'start' });
-    expect(t.core.s.game!.round.dealer).toBe((first + 1) % 3);
+    const dealers = new Set<number>();
+    for (let g = 0; g < 30; g++) {
+      t.send(t.host, { type: 'start' });
+      const d = t.core.s.game!.round.dealer;
+      expect(d).toBeGreaterThanOrEqual(0);
+      expect(d).toBeLessThan(3);
+      dealers.add(d);
+      runToEnd(t);
+      t.send(t.host, { type: 'rematch' });
+      expect(t.core.s.stage).toBe('lobby');
+    }
+    expect(dealers.size).toBeGreaterThan(1);
   });
 
   it('stamps when a game starts and keeps it through the end', () => {

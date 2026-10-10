@@ -60,7 +60,6 @@ export interface RoomState {
   endedEarly: boolean;
   /** When the current game was started; identifies it in metrics. Missing in rooms saved before it existed. */
   gameStartedAt?: number | null;
-  nextFirstDealer: number;
   lastActivity: number;
   /** Number of the last state broadcast (see ServerMsg `seq`). Missing in rooms saved before it existed. */
   seq?: number;
@@ -99,7 +98,6 @@ export function newRoomState(code: string, now: number): RoomState {
     autoDealAt: null,
     endedEarly: false,
     gameStartedAt: null,
-    nextFirstDealer: 0,
     lastActivity: now,
     seq: 0,
   };
@@ -290,7 +288,7 @@ export class RoomCore {
         if (s.members.length < MIN_PLAYERS) return this.err('need_players');
         const n = s.members.length;
         const seed = Math.floor(this.rand() * 2 ** 32);
-        const { state, events } = createGame(n, s.settings, seed, s.nextFirstDealer % n);
+        const { state, events } = createGame(n, s.settings, seed, Math.floor(this.rand() * n));
         s.game = state;
         s.stage = 'game';
         s.gameStartedAt = now;
@@ -369,7 +367,6 @@ export class RoomCore {
         if (s.stage !== 'game' || s.game?.phase !== 'gameEnd') return this.err('wrong_stage');
         s.stage = 'lobby';
         s.game = null;
-        s.nextFirstDealer += 1;
         s.endedEarly = false;
         s.ready = [];
         s.pause = null;
