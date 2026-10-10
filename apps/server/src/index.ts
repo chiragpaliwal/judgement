@@ -1,7 +1,7 @@
 import { getServerByName, routePartykitRequest } from 'partyserver';
 import { CODE_ALPHABET, CODE_LENGTH, isRoomCode } from '@judgement/engine';
 
-import { readStats } from './metrics';
+import { readHistory, readLeaderboard, readStats } from './metrics';
 
 export { Room } from './room';
 
@@ -12,6 +12,15 @@ function tokenMatches(given: string, expected: string) {
   let diff = a.length ^ b.length;
   for (let i = 0; i < b.length; i++) diff |= (a[i] ?? 0) ^ b[i];
   return diff === 0;
+}
+
+/** Body of the per-device endpoints. POST keeps the secret device id out of URLs and logs. */
+async function deviceBody(request: Request): Promise<{ deviceId: string; before: number | null } | null> {
+  const body = (await request.json().catch(() => null)) as { deviceId?: unknown; before?: unknown } | null;
+  const deviceId = body?.deviceId;
+  if (typeof deviceId !== 'string' || deviceId.length < 8 || deviceId.length > 64) return null;
+  const before = typeof body?.before === 'number' && Number.isFinite(body.before) ? body.before : null;
+  return { deviceId, before };
 }
 
 function randomCode() {
@@ -41,6 +50,16 @@ export default {
       if (!env.STATS_TOKEN || !tokenMatches(token, env.STATS_TOKEN)) return new Response('Unauthorized', { status: 401 });
       const days = Math.min(365, Math.max(1, Number(url.searchParams.get('days')) || 30));
       return Response.json(await readStats(env.DB, days, Date.now()), { headers: { 'cache-control': 'no-store' } });
+    }
+
+    if ((url.pathname === '/api/me/history' || url.pathname === '/api/me/leaderboard') && request.method === 'POST') {
+      const body = await deviceBody(request);
+      if (!body) return new Response('Bad request', { status: 400 });
+      const data =
+        url.pathname === '/api/me/history'
+          ? await readHistory(env.DB, body.deviceId, body.before)
+          : { rows: await readLeaderboard(env.DB, body.deviceId) };
+      return Response.json(data, { headers: { 'cache-control': 'no-store' } });
     }
 
     const m = url.pathname.match(/^\/api\/rooms\/([A-Za-z0-9]+)$/);

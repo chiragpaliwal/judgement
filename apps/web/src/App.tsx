@@ -5,9 +5,11 @@ import { usePrefs } from './lib/prefs';
 import { Home } from './screens/Home';
 import { RoomPage } from './screens/RoomPage';
 import { Stats } from './screens/Stats';
+import { History } from './screens/History';
 
-function parse(path: string): { code: string } | { stats: true } | { home: true; redirect: boolean } {
+function parse(path: string): { code: string } | { stats: true } | { history: true } | { home: true; redirect: boolean } {
   if (path === '/stats') return { stats: true };
+  if (path === '/history') return { history: true };
   const m = path.match(/^\/r\/([A-Za-z0-9]+)\/?$/);
   if (m && isRoomCode(m[1].toUpperCase())) return { code: m[1].toUpperCase() };
   return { home: true, redirect: path !== '/' };
@@ -27,5 +29,6 @@ export function App() {
   }, [path, route]);
 
   if ('stats' in route) return <Stats />;
+  if ('history' in route) return <History />;
   return 'code' in route ? <RoomPage key={route.code} code={route.code} /> : <Home />;
 }

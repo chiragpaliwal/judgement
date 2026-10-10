@@ -153,9 +153,14 @@ export function Home() {
           )}
         </AnimatePresence>
 
-        <button className="dim" style={{ margin: '18px auto 0', fontSize: 14, padding: 12, textDecoration: 'underline', textUnderlineOffset: 4 }} onClick={() => setHowto(true)}>
-          How to play
-        </button>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 18 }}>
+          <button className="dim" style={{ fontSize: 14, padding: 12, textDecoration: 'underline', textUnderlineOffset: 4 }} onClick={() => setHowto(true)}>
+            How to play
+          </button>
+          <button className="dim" style={{ fontSize: 14, padding: 12, textDecoration: 'underline', textUnderlineOffset: 4 }} onClick={() => navigate('/history')}>
+            Past games
+          </button>
+        </div>
         <div style={{ flex: 1, minHeight: 16 }} />
       </div>
       <AnimatePresence>{howto && <HowTo onClose={() => setHowto(false)} />}</AnimatePresence>
