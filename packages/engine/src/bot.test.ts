@@ -29,7 +29,7 @@ declare const process: { env: Record<string, string | undefined> };
 declare const performance: { now(): number };
 declare const console: { log(...args: unknown[]): void };
 
-const settings = { startCards: 3, tracker: true, turnTimer: 0 as const };
+const settings = { startCards: 3, tracker: true, turnTimer: 0 as const, scoring: 'classic' as const };
 
 /** A 3-seat state mid-round, built from explicit hands and tricks. */
 function scenario(round: Partial<Round>): GameState {

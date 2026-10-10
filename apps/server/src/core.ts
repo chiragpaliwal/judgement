@@ -86,7 +86,7 @@ export function newRoomState(code: string, now: number): RoomState {
     createdAt: now,
     hostId: '',
     members: [],
-    settings: { startCards: DEFAULT_START_CARDS, tracker: true, turnTimer: 0 },
+    settings: { startCards: DEFAULT_START_CARDS, tracker: true, turnTimer: 0, scoring: 'classic' },
     stage: 'lobby',
     game: null,
     ready: [],
@@ -113,7 +113,10 @@ export class RoomCore {
   constructor(
     public s: RoomState,
     private rand: Rand = Math.random,
-  ) {}
+  ) {
+    // Rooms saved before scoring modes existed.
+    s.settings.scoring ??= 'classic';
+  }
 
   // ---------- helpers ----------
   member(id: string) {
@@ -254,6 +257,7 @@ export class RoomCore {
         if (msg.startCards !== undefined) s.settings.startCards = Math.max(1, Math.min(17, Math.round(msg.startCards)));
         if (msg.tracker !== undefined) s.settings.tracker = msg.tracker;
         if (msg.turnTimer !== undefined) s.settings.turnTimer = msg.turnTimer;
+        if (msg.scoring !== undefined) s.settings.scoring = msg.scoring;
         return this.ok();
       }
       case 'addBot': {

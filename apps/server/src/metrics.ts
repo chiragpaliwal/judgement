@@ -44,10 +44,10 @@ export function gameStarted(db: D1Database, s: RoomState) {
       db
         .prepare(
           `INSERT OR IGNORE INTO games
-           (id, room, started_at, humans, bots, rounds_planned, start_cards, tracker, turn_timer)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, room, started_at, humans, bots, rounds_planned, start_cards, tracker, turn_timer, scoring)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(id, s.code, s.gameStartedAt ?? s.createdAt, humans.length, bots, g.plan.length, s.settings.startCards, s.settings.tracker ? 1 : 0, s.settings.turnTimer),
+        .bind(id, s.code, s.gameStartedAt ?? s.createdAt, humans.length, bots, g.plan.length, s.settings.startCards, s.settings.tracker ? 1 : 0, s.settings.turnTimer, s.settings.scoring ?? 'classic'),
       ...hashes.map((h) => db.prepare('INSERT OR IGNORE INTO game_players (game_id, player) VALUES (?, ?)').bind(id, h)),
     ]);
   });

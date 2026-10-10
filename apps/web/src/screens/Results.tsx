@@ -4,7 +4,7 @@ import type { GameView, RoomView } from '@judgement/engine';
 import { useRoom } from '../net/room';
 import { initialOf, seatNames } from '../game/seats';
 import { cap, joinNames, storyLine } from '../game/narrate';
-import { rankOrder, Scoreboard } from './Scoreboard';
+import { rankOrder, Scoreboard, signed } from './Scoreboard';
 import { Icon } from '../ui/icons';
 import { shareOrCopy } from '../lib/share';
 
@@ -35,7 +35,7 @@ export function Results({ room, game }: { room: RoomView; game: GameView }) {
         : `${names[winners[0]]} wins`;
 
   const share = async () => {
-    const lines = order.map((s) => `${rank(s)}. ${room.members[s].name} ${game.totals[s]}`).join('\n');
+    const lines = order.map((s) => `${rank(s)}. ${room.members[s].name} ${signed(game.totals[s])}`).join('\n');
     const text = `Judgement · ${rounds} rounds\n${lines}`;
     const r = await shareOrCopy({ title: 'Judgement results', text });
     if (r === 'copied') {
@@ -90,7 +90,7 @@ export function Results({ room, game }: { room: RoomView; game: GameView }) {
                 {exact(s)}/{rounds}
               </span>
               <span className="mono" style={{ fontSize: 19, fontWeight: 500, textAlign: 'right' }}>
-                {game.totals[s]}
+                {signed(game.totals[s])}
               </span>
             </motion.div>
           ))}
@@ -122,9 +122,11 @@ function Race({ game, names, order }: { game: GameView; names: string[]; order: 
     });
   }, [game]);
   const max = Math.max(10, ...series.flat());
+  // High stakes can push totals below zero.
+  const min = Math.min(0, ...series.flat());
   const rounds = game.history.length;
   const x = (i: number) => (i / Math.max(1, rounds)) * (W - 8) + 4;
-  const y = (v: number) => H - 8 - (v / max) * (H - 24);
+  const y = (v: number) => H - 8 - ((v - min) / (max - min)) * (H - 24);
   const me = game.me;
   const rival = order.find((s) => s !== me) ?? order[0];
   const colour = (s: number) => (s === me ? 'var(--amber)' : s === rival ? 'var(--blue)' : '#4A505B');
@@ -144,7 +146,7 @@ function Race({ game, names, order }: { game: GameView; names: string[]; order: 
         <text x="2" y={y(mid) - 4} fill="#6B717D" fontSize="10" fontFamily="DM Mono, monospace">
           {mid}
         </text>
-        <line x1="0" x2={W} y1={H - 8} y2={H - 8} stroke="#2C313B" />
+        <line x1="0" x2={W} y1={y(0)} y2={y(0)} stroke="#2C313B" />
         {draw.map((s) => {
           const pts = series[s].map((v, i) => `${x(i)},${y(v)}`).join(' ');
           return (

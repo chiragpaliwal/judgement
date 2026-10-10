@@ -120,7 +120,7 @@ export function applyAction(prev: GameState, action: Action): ApplyResult {
 
       // Round complete.
       const bids = r.bids.map((b) => b ?? 0);
-      const points = bids.map((b, i) => scoreFor(b, r.won[i]));
+      const points = bids.map((b, i) => scoreFor(b, r.won[i], state.settings.scoring));
       state.history.push({
         index: r.index,
         cards: r.cards,

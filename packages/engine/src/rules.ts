@@ -1,5 +1,5 @@
 import { rankOf, suitOf, type Card, type Suit } from './cards';
-import type { Play, Round, Trick } from './types';
+import type { Play, Round, ScoringMode, Trick } from './types';
 
 export const nextSeat = (seat: number, n: number) => (seat + 1) % n;
 
@@ -80,7 +80,11 @@ export function wouldLead(card: Card, plays: readonly Play[], trump: Suit): bool
   return beats(card, best, suitOf(plays[0].card), trump);
 }
 
-export const scoreFor = (bid: number, won: number) => (bid === won ? 10 + bid : 0);
+export function scoreFor(bid: number, won: number, mode: ScoringMode = 'classic'): number {
+  if (mode !== 'stakes') return bid === won ? 10 + bid : 0;
+  const v = 11 * bid + 10;
+  return bid === won ? v : -v;
+}
 
 /** Lowest legal card: lowest rank, ties broken by suit order (non-trump preferred). */
 export function lowestCard(cards: readonly Card[], trump: Suit): Card {

@@ -9,6 +9,7 @@ const schema = z.discriminatedUnion('type', [
     startCards: z.number().int().min(1).max(17).optional(),
     tracker: z.boolean().optional(),
     turnTimer: z.union([z.literal(0), z.literal(30), z.literal(60)]).optional(),
+    scoring: z.enum(['classic', 'stakes']).optional(),
   }),
   z.object({ type: z.literal('addBot') }),
   z.object({ type: z.literal('removeMember'), id: z.string().max(40) }),

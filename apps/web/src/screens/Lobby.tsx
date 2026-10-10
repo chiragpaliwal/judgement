@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { DEFAULT_START_CARDS, effectiveStart, MAX_PLAYERS, maxCardsFor, MIN_PLAYERS, type RoomView, type TurnTimer } from '@judgement/engine';
+import { DEFAULT_START_CARDS, effectiveStart, MAX_PLAYERS, maxCardsFor, MIN_PLAYERS, type RoomView, type ScoringMode, type TurnTimer } from '@judgement/engine';
 import { useRoom } from '../net/room';
 import { Icon } from '../ui/icons';
 import { initialOf } from '../game/seats';
@@ -162,6 +162,21 @@ export function Lobby({ room }: { room: RoomView }) {
               {([0, 30, 60] as TurnTimer[]).map((t) => (
                 <button key={t} className={st.turnTimer === t ? 'on' : ''} role="radio" aria-checked={st.turnTimer === t} disabled={!isHost} onClick={() => send({ type: 'setSettings', turnTimer: t })}>
                   {t === 0 ? 'Off' : `${t}s`}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="set">
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Scoring</div>
+              <div className="dim" style={{ fontSize: 12 }}>
+                {st.scoring === 'stakes' ? 'Bid 1 wins or loses 21, bid 2 is 32' : '10 + bid if exact, miss scores 0'}
+              </div>
+            </div>
+            <div className="seg2" role="radiogroup" aria-label="Scoring">
+              {(['classic', 'stakes'] as ScoringMode[]).map((m) => (
+                <button key={m} className={st.scoring === m ? 'on' : ''} role="radio" aria-checked={st.scoring === m} disabled={!isHost} onClick={() => send({ type: 'setSettings', scoring: m })}>
+                  {m === 'classic' ? 'Classic' : 'High stakes'}
                 </button>
               ))}
             </div>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GRACE_MS, HOLD_MS, legalBids, legalCards, ledSuit, openTrick, type ClientMsg } from '@judgement/engine';
 import { newRoomState, RoomCore } from './core';
+import { parseClientMsg } from './protocol';
 
 function seeded(seed = 1) {
   let a = seed;
@@ -59,6 +60,24 @@ function runToEnd(t: ReturnType<typeof setup>) {
 }
 
 describe('RoomCore', () => {
+  it('host picks the scoring mode; defaults to classic', () => {
+    const t = setup(2, 1);
+    expect(t.core.s.settings.scoring).toBe('classic');
+    expect(t.send(t.ids[1], { type: 'setSettings', scoring: 'stakes' }).error).toBe('host_only');
+    expect(t.send(t.host, { type: 'setSettings', scoring: 'stakes' }).error).toBeUndefined();
+    expect(t.core.s.settings.scoring).toBe('stakes');
+    t.send(t.host, { type: 'start' });
+    expect(t.core.s.game!.settings.scoring).toBe('stakes');
+    expect(parseClientMsg(JSON.stringify({ type: 'setSettings', scoring: 'stakes' }))).toEqual({ type: 'setSettings', scoring: 'stakes' });
+    expect(parseClientMsg(JSON.stringify({ type: 'setSettings', scoring: 'double' }))).toBeNull();
+  });
+
+  it('backfills classic scoring for rooms saved before scoring modes', () => {
+    const s = newRoomState('ABCD', 0);
+    delete (s.settings as { scoring?: string }).scoring;
+    expect(new RoomCore(s).s.settings.scoring).toBe('classic');
+  });
+
   it('host is first joiner; needs 3 players to start', () => {
     const t = setup(2, 0);
     expect(t.core.s.hostId).toBe(t.host);

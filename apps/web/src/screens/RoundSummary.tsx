@@ -6,7 +6,7 @@ import { serverNow, useRoom } from '../net/room';
 import { usePrefs } from '../lib/prefs';
 import { initialOf, seatNames } from '../game/seats';
 import { recapHeadline, recapLine } from '../game/narrate';
-import { Scoreboard } from './Scoreboard';
+import { Scoreboard, signed } from './Scoreboard';
 
 export function CountUp({ from, to, duration = 0.6, delay = 0 }: { from: number; to: number; duration?: number; delay?: number }) {
   const [v, setV] = useState(from);
@@ -19,7 +19,7 @@ export function CountUp({ from, to, duration = 0.6, delay = 0 }: { from: number;
     const c = animate(from, to, { duration, delay, ease: [0.2, 0.8, 0.2, 1], onUpdate: (x) => setV(Math.round(x)) });
     return () => c.stop();
   }, [from, to, duration, delay, reduced]);
-  return <>{v}</>;
+  return <>{signed(v)}</>;
 }
 
 /** 09 · Round summary. */
@@ -104,7 +104,7 @@ export function RoundSummary({ room, game }: { room: RoomView; game: GameView })
                   transition={{ delay: 0.25 + i * 0.03, duration: 0.2 }}
                 >
                   {ok ? <Icon.Check size={14} /> : <Icon.X size={14} />}
-                  {ok ? <>+<CountUp from={0} to={rec.points[s]} delay={0.3} /></> : '0'}
+                  {ok ? <>+<CountUp from={0} to={rec.points[s]} delay={0.3} /></> : rec.points[s] < 0 ? <CountUp from={0} to={rec.points[s]} delay={0.3} /> : '0'}
                 </motion.span>
                 <span className="mono" style={{ fontSize: 17, textAlign: 'right' }}>
                   <CountUp from={prevTotals[s]} to={game.totals[s]} delay={0.3} />

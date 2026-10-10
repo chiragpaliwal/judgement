@@ -16,7 +16,7 @@ The UI, tokens, components, motion and accessibility follow the design spec (kep
 | Bidding | Starts left of the dealer and goes clockwise. Bids are public. Any bid from 0 to the number of cards is allowed. |
 | Hook | The dealer bids last and may not bid the number that makes the total of all bids equal the cards dealt. This rule is always on. |
 | Play | The player left of the dealer leads the first trick, and each trick's winner leads the next. Players must follow the led suit if they can, otherwise they may play any card. The highest trump wins, or the highest card of the led suit if no trump was played. |
-| Scoring | An exact bid scores 10 + bid. Any miss scores 0. |
+| Scoring | Host picks a mode in the lobby. **Classic** (default): an exact bid scores 10 + bid, any miss scores 0. **High stakes**: the value is 11 × bid + 10 (bid 0: 10, bid 1: 21, bid 9: 109, bid 10: 120); exact scores +value, any miss scores −value. |
 | End | After the 1-card round the highest total wins. Tied players share a rank. |
 
 ## 2. Room behaviour

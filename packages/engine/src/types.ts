@@ -2,6 +2,9 @@ import type { Card, Suit } from './cards';
 
 export type TurnTimer = 0 | 30 | 60;
 
+/** classic: exact = 10 + bid, miss = 0. stakes: ±(11 × bid + 10), i.e. 21 for bid 1, 109 for bid 9. */
+export type ScoringMode = 'classic' | 'stakes';
+
 export interface Settings {
   /** Cards dealt in round 1 (capped by floor(52 / players)). */
   startCards: number;
@@ -9,6 +12,8 @@ export interface Settings {
   tracker: boolean;
   /** Seconds per action, 0 = off. */
   turnTimer: TurnTimer;
+  /** Absent on games saved before scoring modes existed: treat as classic. */
+  scoring: ScoringMode;
 }
 
 export interface Play {

@@ -1,6 +1,6 @@
 // Wire protocol shared by the room server and the web client.
 import type { Card } from './cards';
-import type { GameEvent, Settings, TurnTimer } from './types';
+import type { GameEvent, ScoringMode, Settings, TurnTimer } from './types';
 import type { GameView } from './view';
 
 export const REACTIONS = ['😂', '😬', '🔥', '👏', '😭', '🫡', '😴'] as const;
@@ -64,7 +64,7 @@ export type ServerMsg =
   | { type: 'replaced' };
 
 export type ClientMsg =
-  | { type: 'setSettings'; startCards?: number; tracker?: boolean; turnTimer?: TurnTimer }
+  | { type: 'setSettings'; startCards?: number; tracker?: boolean; turnTimer?: TurnTimer; scoring?: ScoringMode }
   | { type: 'addBot' }
   | { type: 'removeMember'; id: string }
   | { type: 'start' }

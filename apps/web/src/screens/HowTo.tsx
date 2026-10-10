@@ -65,7 +65,7 @@ export function HowTo({ onClose }: { onClose: () => void }) {
           Whoever leads sets the suit. You must follow it if you can. If you can’t, play anything, including a trump. Highest trump wins, otherwise the highest card of the led suit.
         </Step>
         <Step n={5} title="Scoring">
-          Exactly right: <b style={{ color: 'var(--text)' }}>10 + your bid</b>. Bid 0 and take none: 10. Bid 3 and take 3: 13. Any miss scores 0. Highest total after the 1-card round wins.
+          Exactly right: <b style={{ color: 'var(--text)' }}>10 + your bid</b>. Bid 0 and take none: 10. Bid 3 and take 3: 13. Any miss scores 0. Highest total after the 1-card round wins. In <b style={{ color: 'var(--text)' }}>High stakes</b>, the score is your bid plus one, then your bid (bid 1: 21, bid 2: 32, bid 9: 109), and a miss loses that much instead.
         </Step>
         <Step n={6} title="Reading the table">
           The number on each avatar is how many tricks that player still needs. <span style={{ color: 'var(--blue)' }}>Blue 0</span> means they want to lose the rest. <span style={{ color: 'var(--coral)' }}>×</span> means they can no longer make it. The centre says whether the table is <span style={{ color: 'var(--amber)' }}>short</span> (more tricks wanted than left) or has some <span style={{ color: 'var(--blue)' }}>spare</span>.

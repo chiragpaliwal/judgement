@@ -73,7 +73,7 @@ export function botBid(state: GameState, seat: number, opts: BotOptions = {}): n
         live: new Set(world.flat()),
       };
       rollout(sim);
-      scores[ci] += utility(sim, seat, weights);
+      scores[ci] += utility(sim, seat, weights, state.settings.scoring);
     });
   }
   return pickBest(cands, scores, fallback);
@@ -120,7 +120,7 @@ export function botPlay(state: GameState, seat: number, opts: BotOptions = {}): 
       const s = cloneSim(sim);
       step(s, c);
       rollout(s);
-      scores[ci] += utility(s, seat, weights);
+      scores[ci] += utility(s, seat, weights, state.settings.scoring);
     });
   }
   return pickBest(cands, scores, cands.includes(prefer) ? prefer : equivalent(prefer, cands, belief.pool));

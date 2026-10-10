@@ -25,12 +25,13 @@ import {
   wouldLead,
   type Card,
   type GameState,
+  type ScoringMode,
   type Settings,
 } from './index';
 
 const FAST = { samples: 4 };
 
-const settings = (o: Partial<Settings> = {}): Settings => ({ startCards: 8, tracker: true, turnTimer: 0, ...o });
+const settings = (o: Partial<Settings> = {}): Settings => ({ startCards: 8, tracker: true, turnTimer: 0, scoring: 'classic', ...o });
 
 describe('schedule', () => {
   it('rotates trump Hearts, Spades, Diamonds, Clubs', () => {
@@ -122,6 +123,28 @@ describe('scoring', () => {
     expect(scoreFor(3, 3)).toBe(13);
     expect(scoreFor(2, 3)).toBe(0);
     expect(scoreFor(2, 1)).toBe(0);
+    expect(scoreFor(2, 1, 'classic')).toBe(0);
+  });
+
+  it('high stakes = ±(11 × bid + 10)', () => {
+    expect(scoreFor(0, 0, 'stakes')).toBe(10);
+    expect(scoreFor(0, 1, 'stakes')).toBe(-10);
+    expect(scoreFor(1, 1, 'stakes')).toBe(21);
+    expect(scoreFor(2, 2, 'stakes')).toBe(32);
+    expect(scoreFor(2, 3, 'stakes')).toBe(-32);
+    expect(scoreFor(9, 9, 'stakes')).toBe(109);
+    expect(scoreFor(10, 10, 'stakes')).toBe(120);
+    expect(scoreFor(11, 12, 'stakes')).toBe(-131);
+    expect(scoreFor(17, 17, 'stakes')).toBe(197);
+  });
+
+  it('games saved without a scoring mode score classic', () => {
+    const { scoring: _, ...legacy } = settings({ startCards: 1 });
+    let { state } = createGame(3, legacy as Settings, 1, 0);
+    for (const seat of [1, 2]) state = ok(applyAction(state, { type: 'bid', seat, bid: 1 }));
+    state = ok(applyAction(state, { type: 'bid', seat: 0, bid: 1 }));
+    while (state.phase === 'playing') state = ok(applyAction(state, { type: 'play', seat: state.round.turn, card: state.round.hands[state.round.turn][0] }));
+    expect(state.history[0].points.every((p) => p === 0 || p === 11)).toBe(true);
   });
 });
 
@@ -165,8 +188,8 @@ function ok(res: ReturnType<typeof applyAction>): GameState {
   return res.state;
 }
 
-function playOut(n: number, start: number, seed: number, firstDealer: number, tracker: boolean) {
-  let { state } = createGame(n, settings({ startCards: start, tracker }), seed, firstDealer);
+function playOut(n: number, start: number, seed: number, firstDealer: number, tracker: boolean, scoring: ScoringMode = 'classic') {
+  let { state } = createGame(n, settings({ startCards: start, tracker, scoring }), seed, firstDealer);
   let steps = 0;
   const expectedTotals = Array(n).fill(0);
   while (state.phase !== 'gameEnd') {
@@ -202,7 +225,10 @@ function playOut(n: number, start: number, seed: number, firstDealer: number, tr
       if (state.phase === 'roundEnd' || state.phase === 'gameEnd') {
         const rec = state.history[state.history.length - 1];
         expect(rec.won.reduce((a, b) => a + b, 0)).toBe(rec.cards);
-        rec.bids.forEach((b, i) => (expectedTotals[i] += b === rec.won[i] ? 10 + b : 0));
+        rec.bids.forEach((b, i) => {
+          const v = scoring === 'stakes' ? 11 * b + 10 : 10 + b;
+          expectedTotals[i] += b === rec.won[i] ? v : scoring === 'stakes' ? -v : 0;
+        });
         expect(state.totals).toEqual(expectedTotals);
       }
     } else if (state.phase === 'roundEnd') {
@@ -226,8 +252,9 @@ describe('full games (property)', () => {
         fc.integer({ min: 0, max: 2 ** 31 }),
         fc.integer({ min: 0, max: 6 }),
         fc.boolean(),
-        (n, start, seed, fd, tracker) => {
-          playOut(n, start, seed, fd % n, tracker);
+        fc.constantFrom<ScoringMode>('classic', 'stakes'),
+        (n, start, seed, fd, tracker, scoring) => {
+          playOut(n, start, seed, fd % n, tracker, scoring);
         },
       ),
       { numRuns: 60 },

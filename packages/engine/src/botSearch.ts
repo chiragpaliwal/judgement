@@ -5,7 +5,7 @@ import { voids } from './derive';
 import { heuristicEstimate, heuristicPlay, nextHigher } from './botPolicy';
 import { scoreFor, winningIndex } from './rules';
 import { shuffle } from './rng';
-import type { GameState, Play } from './types';
+import type { GameState, Play, ScoringMode } from './types';
 
 /** Weight on opponents' scores relative to the bot's own. Below 1 so the bot stays safe first. */
 export const SPOILER_WEIGHT = 0.5;
@@ -74,9 +74,9 @@ export function threatWeights(totals: readonly number[], seat: number): number[]
 }
 
 /** Own score minus a weighted share of opponents' scores. */
-export function utility(s: Sim, seat: number, weights: readonly number[]): number {
-  let u = scoreFor(s.bids[seat], s.won[seat]);
-  for (let j = 0; j < s.n; j++) if (j !== seat) u -= SPOILER_WEIGHT * weights[j] * scoreFor(s.bids[j], s.won[j]);
+export function utility(s: Sim, seat: number, weights: readonly number[], mode?: ScoringMode): number {
+  let u = scoreFor(s.bids[seat], s.won[seat], mode);
+  for (let j = 0; j < s.n; j++) if (j !== seat) u -= SPOILER_WEIGHT * weights[j] * scoreFor(s.bids[j], s.won[j], mode);
   return u;
 }
 

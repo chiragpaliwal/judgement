@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { trumpFor, type GameView, type RoomView } from '@judgement/engine';
+import { scoreFor, trumpFor, type GameView, type RoomView } from '@judgement/engine';
 import { SuitIcon } from '../ui/icons';
 import { initialOf, seatNames } from '../game/seats';
 import { Sheet } from './Sheet';
+
+/** Typographic minus for negative scores. */
+export const signed = (v: number) => (v < 0 ? `−${-v}` : `${v}`);
 
 export function rankOrder(totals: number[]) {
   return totals.map((t, i) => i).sort((a, b) => totals[b] - totals[a] || a - b);
@@ -62,7 +65,7 @@ export function ScoreTable({ room, game }: { room: RoomView; game: GameView }) {
               const miss = h.bids[s] !== h.won[s];
               return (
                 <div key={`${ri}-${s}`} className="mono" style={{ height: 40, display: 'grid', placeItems: 'center', fontSize: mode === 'pts' ? 15 : 13, color: miss ? 'var(--coral)' : undefined, opacity: miss ? 0.85 : 1, background: bg }}>
-                  {mode === 'pts' ? h.points[s] : `${h.bids[s]}·${h.won[s]}`}
+                  {mode === 'pts' ? signed(h.points[s]) : `${h.bids[s]}·${h.won[s]}`}
                 </div>
               );
             }),
@@ -72,7 +75,7 @@ export function ScoreTable({ room, game }: { room: RoomView; game: GameView }) {
         <div style={{ height: 52, display: 'flex', alignItems: 'center', paddingLeft: 12, fontSize: 15, fontWeight: 600 }}>Total</div>
         {order.map((s) => (
           <div key={`t${s}`} className="mono" style={{ height: 52, display: 'grid', placeItems: 'center', fontSize: 19, fontWeight: 500, background: s === game.me ? '#16191F' : undefined }}>
-            {game.totals[s]}
+            {signed(game.totals[s])}
           </div>
         ))}
         <div className="dim" style={{ height: 40, display: 'flex', alignItems: 'center', paddingLeft: 12, fontSize: 13 }}>
@@ -95,7 +98,7 @@ export function Scoreboard({ room, game, onClose }: { room: RoomView; game: Game
   const max = Math.max(1, game.totals[lead]);
   const played = game.history.length;
   const remainingRounds = game.plan.slice(played);
-  const maxLeft = remainingRounds.reduce((a, c) => a + 10 + c, 0);
+  const maxLeft = remainingRounds.reduce((a, c) => a + scoreFor(c, c, game.settings.scoring), 0);
 
   return (
     <Sheet variant="full" title="Scores" sub={`after round ${played} of ${game.plan.length}`} onClose={onClose} label="Scoreboard">
@@ -104,7 +107,7 @@ export function Scoreboard({ room, game, onClose }: { room: RoomView; game: Game
           <span className="k">Leading</span>
           <b style={{ fontSize: 18 }}>{names[lead]}</b>
           <span className="mono" style={{ fontSize: 18 }}>
-            {game.totals[lead]}
+            {signed(game.totals[lead])}
           </span>
           <span className="dim" style={{ marginLeft: 'auto', fontSize: 12 }}>
             {remainingRounds.length ? `${remainingRounds.length} round${remainingRounds.length === 1 ? '' : 's'}, max ${maxLeft} left to win` : 'Final'}
@@ -117,12 +120,12 @@ export function Scoreboard({ room, game, onClose }: { room: RoomView; game: Game
               <motion.span
                 style={{ display: 'block', height: '100%', borderRadius: 3, background: s === game.me ? 'var(--amber)' : '#5A606B' }}
                 initial={{ width: 0 }}
-                animate={{ width: `${(game.totals[s] / max) * 100}%` }}
+                animate={{ width: `${Math.max(0, game.totals[s] / max) * 100}%` }}
                 transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
               />
             </span>
             <span className="mono dim" style={{ textAlign: 'right' }}>
-              {s === lead ? game.totals[s] : `−${game.totals[lead] - game.totals[s]}`}
+              {s === lead ? signed(game.totals[s]) : `−${game.totals[lead] - game.totals[s]}`}
             </span>
           </div>
         ))}

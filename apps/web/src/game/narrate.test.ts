@@ -8,7 +8,7 @@ function view(partial: Partial<GameView['round']>, phase: GameView['phase'] = 'p
   return {
     phase,
     n: 6,
-    settings: { startCards: 8, tracker: true, turnTimer: 0 },
+    settings: { startCards: 8, tracker: true, turnTimer: 0, scoring: 'classic' },
     plan: [8, 7, 6, 5, 4, 3, 2, 1],
     me: 0,
     history: [],
