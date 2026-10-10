@@ -3,7 +3,7 @@ import type { Card } from './cards';
 import type { GameEvent, ScoringMode, Settings, TurnTimer } from './types';
 import type { GameView } from './view';
 
-export const REACTIONS = ['😂', '😬', '🔥', '👏', '😭', '🫡', '😴'] as const;
+export const REACTIONS = ['😂', '👍', '🔥', '👏', '😭', '😡', '😴'] as const;
 export type Reaction = (typeof REACTIONS)[number];
 
 /** Offline this long before the table pauses; long enough to ride out one reconnect on a phone. */

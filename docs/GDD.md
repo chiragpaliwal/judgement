@@ -29,7 +29,7 @@ The UI, tokens, components, motion and accessibility follow the design spec (kep
 | Disconnect | A player is offline when their socket closes, or when it goes 30s without answering the heartbeat (a backgrounded phone often leaves a half-open socket). After 10s offline the game pauses for everyone and the seat is held for 60s. If most connected players vote "Keep waiting", the hold gets another 60s. When the hold runs out without a vote, the game stays paused and the host decides: either **Play their turns** (lowest legal card) or **End game**. A returning player takes their seat back automatically. If the host is the one offline, host rights pass to the next connected player when the hold ends. |
 | Between rounds | The round summary appears. The next deal happens 8s after the first Ready, immediately once everyone is Ready, or after 30s if nobody taps Ready. |
 | Card tracker | A host setting, on by default. When it is off, the server only sends the current trick and the last trick. |
-| Reactions | 😂 😬 🔥 👏 😭 🫡, plus 😴 on the pause screen. Each player can send one every 2s. |
+| Reactions | 😂 👍 🔥 👏 😭 😡, plus 😴 on the pause screen. Each player can send one every 2s. |
 | Rematch | Keeps the same room and players, resets scores, and moves the first dealer on by one. |
 | Room expiry | A room is deleted 30 minutes after its last activity once nobody is connected. |
 

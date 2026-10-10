@@ -29,11 +29,11 @@ export type Overlay = 'scores' | 'seen' | 'menu' | null;
 
 export const REACTION_LABELS: Record<Reaction, string> = {
   '😂': 'Laugh',
-  '😬': 'Yikes',
+  '👍': 'Thumbs up',
   '🔥': 'Fire',
   '👏': 'Clap',
   '😭': 'Cry',
-  '🫡': 'Salute',
+  '😡': 'Angry',
   '😴': 'Sleep',
 };
 const QUICK: Reaction[] = REACTIONS.filter((r) => r !== '😴');
@@ -62,7 +62,7 @@ export function TopBar({ game, onScores, onMenu }: { game: GameView; onScores: (
 
 export function ReactionDock({ disabled, pausedSet }: { disabled?: boolean; pausedSet?: boolean }) {
   const send = useRoom((s) => s.send);
-  const set = pausedSet ? (['😂', '😬', '😴', '👏', '😭', '🫡'] as Reaction[]) : QUICK;
+  const set = pausedSet ? (['😂', '👍', '😴', '👏', '😭', '😡'] as Reaction[]) : QUICK;
   return (
     <div className="dock rxs" aria-label="Quick reactions">
       {set.map((e) => (

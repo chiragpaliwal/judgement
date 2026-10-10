@@ -44,7 +44,7 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2
 input { font: inherit; color: inherit; }
 h1, h2, h3, p { margin: 0; }
 
-/* Emoji straight from the system emoji font: falling back from the webfont mis-measured the newest ones (🫡) on iOS and clipped them. */
+/* Emoji straight from the system emoji font: falling back from the webfont mis-measured the newest ones (newer emoji) on iOS and clipped them. */
 .rx, .bub { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; line-height: 1; }
 .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .dim { color: var(--text-dim); }
