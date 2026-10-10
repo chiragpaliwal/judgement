@@ -2,8 +2,7 @@
 import { usePrefs } from './prefs';
 
 let ctx: AudioContext | null = null;
-function audio(): AudioContext | null {
-  if (!usePrefs.getState().sound) return null;
+function context(): AudioContext | null {
   try {
     ctx ??= new AudioContext();
     if (ctx.state === 'suspended') void ctx.resume();
@@ -13,10 +12,14 @@ function audio(): AudioContext | null {
   }
 }
 
-/** Unlock audio on the first user gesture (iOS). */
+function audio(): AudioContext | null {
+  return usePrefs.getState().sound ? context() : null;
+}
+
+/** Unlock audio on a user gesture (iOS). Runs regardless of the sound pref so
+ *  turning sound on later, outside a gesture, still has a running context. */
 export function unlockAudio() {
-  const a = audio();
-  if (a && a.state === 'suspended') void a.resume();
+  context();
 }
 
 function tone(freq: number, dur: number, opts: { type?: OscillatorType; gain?: number; delay?: number; slide?: number } = {}) {
@@ -99,8 +102,31 @@ export function haptic(kind: 'light' | 'medium' | 'turn' | 'made' | 'missed') {
   if (!usePrefs.getState().haptics) return;
   const pattern = { light: [10], medium: [35], turn: [30], made: [20, 40, 20], missed: [80] }[kind];
   try {
-    navigator.vibrate?.(pattern);
+    if (typeof navigator.vibrate === 'function') navigator.vibrate(pattern);
+    else iosTick();
   } catch {
     /* unsupported */
   }
+}
+
+/** iOS Safari has no Vibration API. Since iOS 18, toggling an
+ *  `<input type="checkbox" switch>` via its label gives a haptic tick, but only
+ *  inside a user gesture — so server-driven haptics stay silent on iPhone. */
+let iosLabel: HTMLLabelElement | null = null;
+function iosTick() {
+  if (!iosLabel) {
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.setAttribute('switch', '');
+    input.id = 'jd-haptic';
+    const label = document.createElement('label');
+    label.htmlFor = input.id;
+    label.setAttribute('aria-hidden', 'true');
+    label.style.display = 'none';
+    input.style.display = 'none';
+    label.appendChild(input);
+    document.body.appendChild(label);
+    iosLabel = label;
+  }
+  iosLabel.click();
 }

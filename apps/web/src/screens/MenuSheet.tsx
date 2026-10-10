@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { GameView, RoomView } from '@judgement/engine';
 import { usePrefs } from '../lib/prefs';
+import { unlockAudio } from '../lib/fx';
 import { navigate } from '../lib/router';
 import { useRoom } from '../net/room';
 import { Sheet } from './Sheet';
@@ -36,7 +37,10 @@ export function MenuSheet({ room, game, onClose }: { room: RoomView; game: GameV
     <>
       <Sheet variant="short" title="Room" sub={<span className="mono">{room.code}</span>} onClose={onClose} label="Room menu">
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {row('Sound', null, prefs.sound, () => prefs.set({ sound: !prefs.sound }))}
+          {row('Sound', null, prefs.sound, () => {
+            if (!prefs.sound) unlockAudio();
+            prefs.set({ sound: !prefs.sound });
+          })}
           {row('Vibration', 'On phones that support it', prefs.haptics, () => prefs.set({ haptics: !prefs.haptics }))}
           {row('Reduced motion', 'Cards fade instead of flying', prefs.reducedMotion, () => prefs.set({ reducedMotion: !prefs.reducedMotion }))}
         </div>
