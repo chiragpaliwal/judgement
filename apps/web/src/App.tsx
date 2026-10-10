@@ -4,8 +4,10 @@ import { usePath, navigate } from './lib/router';
 import { usePrefs } from './lib/prefs';
 import { Home } from './screens/Home';
 import { RoomPage } from './screens/RoomPage';
+import { Stats } from './screens/Stats';
 
-function parse(path: string): { code: string } | { home: true; redirect: boolean } {
+function parse(path: string): { code: string } | { stats: true } | { home: true; redirect: boolean } {
+  if (path === '/stats') return { stats: true };
   const m = path.match(/^\/r\/([A-Za-z0-9]+)\/?$/);
   if (m && isRoomCode(m[1].toUpperCase())) return { code: m[1].toUpperCase() };
   return { home: true, redirect: path !== '/' };
@@ -24,5 +26,6 @@ export function App() {
     if ('home' in route && route.redirect) navigate('/', true);
   }, [path, route]);
 
+  if ('stats' in route) return <Stats />;
   return 'code' in route ? <RoomPage key={route.code} code={route.code} /> : <Home />;
 }

@@ -36,7 +36,26 @@ pnpm deploy                              # builds the web app and deploys the Wo
 
 Out of the box the app is served at `https://judgement.<your-subdomain>.workers.dev`. The live site uses a custom domain, set by the `routes` entry in `apps/server/wrangler.jsonc`. Change or remove it if you fork the repo.
 
-To deploy automatically from GitHub, add a `CLOUDFLARE_API_TOKEN` secret (with Workers Scripts, Workers Routes and DNS edit permissions for a custom domain). CI deploys every push to `main` (see `.github/workflows/ci.yml`).
+To deploy automatically from GitHub, add a `CLOUDFLARE_API_TOKEN` secret (with Workers Scripts, Workers Routes, D1 Edit and DNS edit permissions for a custom domain). CI deploys every push to `main` (see `.github/workflows/ci.yml`).
+
+## Stats (how many games are played)
+
+Rooms and games are recorded in a D1 database (`judgement`) and as structured log lines (`room_created`, `game_started`, `game_ended`). One-time setup:
+
+```sh
+cd apps/server
+npx wrangler d1 create judgement        # paste the database_id into wrangler.jsonc
+npx wrangler secret put STATS_TOKEN     # any long random string
+pnpm db:migrate                          # CI also runs this before each deploy
+```
+
+Locally run `pnpm --filter @judgement/server db:migrate:local` once. View the numbers at `/stats` (asks for the token), or query directly:
+
+```sh
+npx wrangler d1 execute judgement --remote --command "select status, count(*) from games group by status"
+```
+
+`status` is `completed`, `ended_early` (host ended it), `abandoned` (room expired mid-game) or `active`. Players are stored as a truncated hash of their device id.
 
 ## Layout
 

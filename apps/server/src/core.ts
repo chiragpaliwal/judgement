@@ -58,6 +58,8 @@ export interface RoomState {
   settleUntil: number;
   autoDealAt: number | null;
   endedEarly: boolean;
+  /** When the current game was started; identifies it in metrics. Missing in rooms saved before it existed. */
+  gameStartedAt?: number | null;
   nextFirstDealer: number;
   lastActivity: number;
   /** Number of the last state broadcast (see ServerMsg `seq`). Missing in rooms saved before it existed. */
@@ -96,6 +98,7 @@ export function newRoomState(code: string, now: number): RoomState {
     settleUntil: 0,
     autoDealAt: null,
     endedEarly: false,
+    gameStartedAt: null,
     nextFirstDealer: 0,
     lastActivity: now,
     seq: 0,
@@ -290,6 +293,7 @@ export class RoomCore {
         const { state, events } = createGame(n, s.settings, seed, s.nextFirstDealer % n);
         s.game = state;
         s.stage = 'game';
+        s.gameStartedAt = now;
         s.ready = [];
         s.pause = null;
         s.endedEarly = false;

@@ -13,6 +13,14 @@
   "durable_objects": {
     "bindings": [{ "name": "Room", "class_name": "Room" }]
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "judgement",
+      "database_id": "0360037c-da00-4010-851d-c0566381d3d4",
+      "migrations_dir": "migrations"
+    }
+  ],
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
   "observability": { "enabled": true }
 }

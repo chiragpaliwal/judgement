@@ -2,6 +2,7 @@ import { Server, type Connection, type ConnectionContext, type WSMessage } from 
 import type { GameEvent, ServerMsg } from '@judgement/engine';
 import { newRoomState, RoomCore, type RoomState } from './core';
 import { parseClientMsg } from './protocol';
+import { gameEnded, gameStarted, log, roomCreated } from './metrics';
 
 /** `seen`: last time this socket proved it was alive (connect, message or fallback ping). */
 type ConnState = { playerId: string | null; seen: number };
@@ -12,11 +13,6 @@ const STALE_MS = 30_000;
 const SWEEP_MS = 10_000;
 const PING = 'ping';
 const PONG = 'pong';
-
-/** One JSON line per connection event, for Workers Logs (observability is on in wrangler.jsonc). */
-function log(event: string, fields: Record<string, unknown>) {
-  console.log(JSON.stringify({ event, ...fields }));
-}
 
 export class Room extends Server<Env> {
   static override options = { hibernate: true };
@@ -34,8 +30,10 @@ export class Room extends Server<Env> {
     if (req.method === 'POST') {
       const live = this.core && this.core.s.members.length > 0 && now - this.core.s.lastActivity < ROOM_TTL_MS;
       if (live) return new Response('taken', { status: 409 });
+      this.abandonIfRunning(now);
       this.core = new RoomCore(newRoomState(this.name, now));
       await this.commit([]);
+      this.ctx.waitUntil(roomCreated(this.env.DB, this.name, now, req.headers.get('x-country')));
       return Response.json({ code: this.name });
     }
     if (!this.core) return Response.json({ exists: false }, { status: 404 });
@@ -135,6 +133,7 @@ export class Room extends Server<Env> {
     const now = Date.now();
     const anyone = [...this.getConnections()].length > 0;
     if (!anyone && now - this.core.s.lastActivity >= ROOM_TTL_MS) {
+      this.abandonIfRunning(this.core.s.lastActivity);
       await this.ctx.storage.deleteAll();
       this.core = null;
       return;
@@ -212,11 +211,25 @@ export class Room extends Server<Env> {
     this.broadcast(JSON.stringify(msg));
   }
 
+  /** Records a game that is being discarded (room expired or its code reused) before it reached gameEnd. */
+  private abandonIfRunning(at: number) {
+    const s = this.core?.s;
+    if (s && s.stage === 'game' && s.game && s.game.phase !== 'gameEnd') {
+      this.ctx.waitUntil(gameEnded(this.env.DB, s, 'abandoned', at));
+    }
+  }
+
   private async commit(events: GameEvent[]) {
     const core = this.core;
     if (!core) return;
     const seq = (core.s.seq = (core.s.seq ?? 0) + 1);
     await this.ctx.storage.put('room', core.s);
+    for (const e of events) {
+      if (e.type === 'dealt' && e.round === 0) this.ctx.waitUntil(gameStarted(this.env.DB, core.s));
+      else if (e.type === 'gameOver') {
+        this.ctx.waitUntil(gameEnded(this.env.DB, core.s, core.s.endedEarly ? 'ended_early' : 'completed', Date.now()));
+      }
+    }
     const now = Date.now();
     for (const c of this.getConnections<ConnState>()) {
       const pid = c.state?.playerId ?? null;

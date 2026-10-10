@@ -207,6 +207,17 @@ describe('RoomCore', () => {
     expect(t.core.s.game!.round.dealer).toBe((first + 1) % 3);
   });
 
+  it('stamps when a game starts and keeps it through the end', () => {
+    const t = setup(1, 2);
+    expect(t.core.s.gameStartedAt).toBeNull();
+    t.send(t.host, { type: 'setSettings', startCards: 1 });
+    t.send(t.host, { type: 'start' });
+    const at = t.core.s.gameStartedAt;
+    expect(at).toBe(t.now);
+    runToEnd(t);
+    expect(t.core.s.gameStartedAt).toBe(at);
+  });
+
   it('schedules a wake-up as soon as a bot has to act', () => {
     const t = setup(1, 2);
     t.send(t.host, { type: 'start' });
