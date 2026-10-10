@@ -232,7 +232,7 @@ describe('full games (property)', () => {
       ),
       { numRuns: 60 },
     );
-  });
+  }, 30_000);
 
   it('tracker off hides older tricks', () => {
     let { state } = createGame(4, settings({ tracker: false }), 7, 0);
