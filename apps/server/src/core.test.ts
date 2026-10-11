@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GRACE_MS, HOLD_MS, legalBids, legalCards, ledSuit, openTrick, type ClientMsg } from '@judgement/engine';
+import { GRACE_MS, HOLD_MS, VOTE_WINDOW_MS, legalBids, legalCards, ledSuit, openTrick, type ClientMsg } from '@judgement/engine';
 import { idleExpired, newRoomState, nextAlarm, ROOM_TTL_MS, RoomCore } from './core';
 import { parseClientMsg } from './protocol';
 
@@ -119,10 +119,18 @@ describe('RoomCore', () => {
     const turn = t.core.s.members[t.core.s.game!.round.turn].id;
     if (turn !== victim) expect(t.send(turn, { type: 'bid', bid: 0 }).error).toBe('paused');
     const until = t.core.s.pause!.holdUntil;
+    // Voting is closed until the last VOTE_WINDOW_MS of the hold.
+    expect(t.send(t.ids[0], { type: 'voteWait' }).error).toBe('vote_closed');
+    expect(t.core.s.pause!.votes).toEqual([]);
+    t.advance(HOLD_MS - VOTE_WINDOW_MS);
     t.send(t.ids[0], { type: 'voteWait' });
     expect(t.core.s.pause!.holdUntil).toBe(until); // 1 of 3 is not a majority
     t.send(t.ids[1], { type: 'voteWait' });
     expect(t.core.s.pause!.holdUntil).toBe(until + 60_000);
+    expect(t.core.s.pause!.extensions).toBe(1);
+    expect(t.core.s.pause!.votes).toEqual([]);
+    // Voting closes again after an extension.
+    expect(t.send(t.ids[0], { type: 'voteWait' }).error).toBe('vote_closed');
     t.advance(121_000);
     expect(t.core.s.pause!.expired).toBe(true);
     // Stays paused until the host acts.

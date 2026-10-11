@@ -9,6 +9,8 @@ export type Reaction = (typeof REACTIONS)[number];
 /** Offline this long before the table pauses; long enough to ride out one reconnect on a phone. */
 export const GRACE_MS = 10_000;
 export const HOLD_MS = 60_000;
+/** "Keep waiting" votes only open this close to the hold running out (or after it has). */
+export const VOTE_WINDOW_MS = 30_000;
 /** Next round deals this long after the first Ready... */
 export const READY_DEAL_MS = 8_000;
 /** ...or after this long if nobody taps Ready. */
@@ -47,6 +49,8 @@ export interface PauseView {
   /** Epoch ms when the seat hold ends. */
   holdUntil: number;
   votes: string[];
+  /** How many times the table has voted to keep waiting. */
+  extensions: number;
   /** Hold ran out; the host decides. */
   expired: boolean;
 }

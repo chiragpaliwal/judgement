@@ -11,6 +11,7 @@ import {
   DEFAULT_START_CARDS,
   GRACE_MS,
   HOLD_MS,
+  VOTE_WINDOW_MS,
   ledSuit,
   legalBids,
   legalCards,
@@ -57,7 +58,7 @@ export interface RoomState {
   stage: 'lobby' | 'game';
   game: GameState | null;
   ready: string[];
-  pause: { playerId: string; holdUntil: number; votes: string[]; expired: boolean } | null;
+  pause: { playerId: string; holdUntil: number; votes: string[]; extensions: number; expired: boolean } | null;
   turnDeadline: number | null;
   turnRemaining: number | null;
   botDue: number | null;
@@ -374,12 +375,14 @@ export class RoomCore {
         const p = s.pause;
         if (!p) return this.err('not_paused');
         if (p.playerId === playerId) return this.err('cannot_vote');
+        if (!p.expired && p.holdUntil - now > VOTE_WINDOW_MS) return this.err('vote_closed');
         if (!p.votes.includes(playerId)) p.votes.push(playerId);
         const eligible = s.members.filter((m) => !m.isBot && m.connected && m.id !== p.playerId).length;
         if (p.votes.length * 2 > eligible) {
           p.holdUntil = (p.expired ? now : Math.max(now, p.holdUntil)) + HOLD_MS;
           p.expired = false;
           p.votes = [];
+          p.extensions = (p.extensions ?? 0) + 1; // `?? 0`: pauses persisted before this field existed
         }
         return this.ok();
       }
@@ -493,7 +496,7 @@ export class RoomCore {
           (m) => !m.isBot && !m.autoplay && !m.connected && m.offlineSince !== null && now - m.offlineSince >= GRACE_MS,
         );
         if (gone) {
-          s.pause = { playerId: gone.id, holdUntil: now + HOLD_MS, votes: [], expired: false };
+          s.pause = { playerId: gone.id, holdUntil: now + HOLD_MS, votes: [], extensions: 0, expired: false };
           if (s.turnDeadline !== null) s.turnRemaining = Math.max(0, s.turnDeadline - now);
           s.turnDeadline = null;
           s.botDue = null;
@@ -588,7 +591,7 @@ export class RoomCore {
       settings: { ...s.settings },
       stage: s.stage,
       ready: [...s.ready],
-      pause: s.pause ? { ...s.pause, votes: [...s.pause.votes] } : null,
+      pause: s.pause ? { ...s.pause, votes: [...s.pause.votes], extensions: s.pause.extensions ?? 0 } : null,
       turnDeadline: s.pause ? null : s.turnDeadline,
       autoDealAt: s.game?.phase === 'roundEnd' ? s.autoDealAt : null,
       endedEarly: s.endedEarly,

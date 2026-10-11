@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { HOLD_MS, type GameView, type RoomView } from '@judgement/engine';
+import { HOLD_MS, VOTE_WINDOW_MS, type GameView, type RoomView } from '@judgement/engine';
 import { Icon } from '../ui/icons';
 import { serverNow, useRoom } from '../net/room';
 import { initialOf } from '../game/seats';
@@ -13,6 +13,23 @@ function useNow(ms = 250) {
     return () => clearInterval(t);
   }, [ms]);
   return serverNow();
+}
+
+/** True for a few seconds after the table votes to keep waiting, so the silent reset of the votes is explained. */
+function useExtendedFlash(extensions: number) {
+  const prev = useRef(extensions);
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (extensions <= prev.current) {
+      prev.current = extensions;
+      return;
+    }
+    prev.current = extensions;
+    setOn(true);
+    const t = setTimeout(() => setOn(false), 5000);
+    return () => clearTimeout(t);
+  }, [extensions]);
+  return on;
 }
 
 /** 12 · Paused: someone dropped. */
@@ -32,6 +49,9 @@ export function Paused({ room, game }: { room: RoomView; game: GameView }) {
   const theirTurn = game.round.turn === seat;
   const name = who?.name ?? 'A player';
   const C = 2 * Math.PI * 68;
+  const voteOpen = p.expired || left <= VOTE_WINDOW_MS;
+  const opensIn = Math.ceil((left - VOTE_WINDOW_MS) / 1000);
+  const extended = useExtendedFlash(p.extensions);
 
   return (
     <motion.div style={{ position: 'absolute', inset: 0, zIndex: 50, background: 'rgba(14,16,20,.97)', display: 'flex', flexDirection: 'column' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -75,7 +95,17 @@ export function Paused({ room, game }: { room: RoomView; game: GameView }) {
             )}
           </div>
         </div>
-        {voters.length > 0 && (
+        {extended && (
+          <motion.div
+            role="status"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            style={{ padding: '6px 12px', borderRadius: 999, background: 'rgba(255,184,77,.14)', color: 'var(--amber)', fontSize: 13, fontWeight: 600 }}
+          >
+            Majority voted to wait · +1:00 added
+          </motion.div>
+        )}
+        {voters.length > 0 && voteOpen && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ display: 'flex', gap: 4 }}>
               {voters.map((m) => (
@@ -92,13 +122,19 @@ export function Paused({ room, game }: { room: RoomView; game: GameView }) {
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto' }}>
           <button
             className="opt"
-            style={{ width: '100%', minHeight: 56, borderRadius: 14, background: youVoted ? 'var(--text)' : 'var(--surface-2)', color: youVoted ? 'var(--bg)' : 'var(--text)', display: 'flex', alignItems: 'center', padding: '8px 16px', textAlign: 'left' }}
+            style={{ width: '100%', minHeight: 56, borderRadius: 14, background: youVoted ? 'var(--text)' : 'var(--surface-2)', color: youVoted ? 'var(--bg)' : 'var(--text)', opacity: voteOpen ? 1 : 0.55, display: 'flex', alignItems: 'center', padding: '8px 16px', textAlign: 'left' }}
             onClick={() => send({ type: 'voteWait' })}
-            disabled={youVoted}
+            disabled={youVoted || !voteOpen}
           >
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 600 }}>{p.expired ? 'Wait another minute' : 'Keep waiting'}</div>
-              <div style={{ fontSize: 12, color: youVoted ? '#4A505B' : 'var(--text-dim)' }}>{youVoted ? 'You voted. Adds 60s if most agree.' : 'Adds 60s if most agree.'}</div>
+              <div style={{ fontSize: 12, color: youVoted ? '#4A505B' : 'var(--text-dim)' }}>
+                {!voteOpen
+                  ? `Voting opens in ${opensIn}s${p.extensions > 0 ? ` · extended ${p.extensions}×` : ''}`
+                  : youVoted
+                    ? 'You voted · waiting for the others'
+                    : 'Adds 1 min if most agree'}
+              </div>
             </div>
           </button>
           <button
