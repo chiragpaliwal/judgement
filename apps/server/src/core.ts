@@ -77,6 +77,30 @@ export interface Outcome {
 
 const BOT_NAMES = ['Ada', 'Raj', 'Kai', 'Zoe', 'Ravi', 'Lea', 'Tom', 'Uma'];
 const SETTLE_MS = 1_200;
+export const ROOM_TTL_MS = 30 * 60_000;
+/** Clients ping every 1s on screen and every 10s in the background; a socket silent this long is treated as gone. */
+export const STALE_MS = 30_000;
+
+/** Whether an idle room may be deleted even with sockets open: only in the lobby or on the results screen, never mid-game. */
+export function idleExpired(s: RoomState, now: number): boolean {
+  return now - s.lastActivity >= ROOM_TTL_MS && (s.stage === 'lobby' || s.game?.phase === 'gameEnd');
+}
+
+/**
+ * When to set the alarm. Times already past are dropped: they are work tick() could not do, and
+ * re-arming for them is what made a room fire every 50ms. An idle room past its TTL rechecks a TTL later.
+ */
+export function nextAlarm(
+  now: number,
+  wake: number | null,
+  lastActivity: number,
+  sweepAt: number | null,
+  ttl = ROOM_TTL_MS,
+): number {
+  const expiry = lastActivity + ttl;
+  const times = [wake, expiry > now ? expiry : now + ttl, sweepAt].filter((t): t is number => t !== null && t > now);
+  return Math.max(now + 50, Math.min(...times));
+}
 
 export type Rand = () => number;
 
@@ -450,6 +474,7 @@ export class RoomCore {
       const seat = g.round.turn;
       const actor = s.members[seat];
       if (actor.isBot || actor.autoplay) {
+        s.turnDeadline = null; // stale if a human handed over to autoplay mid-turn
         if (s.botDue === null) {
           s.botDue = Math.max(now, s.settleUntil) + 700 + Math.floor(this.rand() * 700);
           break;
@@ -461,6 +486,7 @@ export class RoomCore {
         }
         break;
       }
+      s.botDue = null; // stale if an autoplay seat was taken back
 
       if (s.settings.turnTimer > 0) {
         if (s.turnDeadline === null) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GRACE_MS, HOLD_MS, legalBids, legalCards, ledSuit, openTrick, type ClientMsg } from '@judgement/engine';
-import { newRoomState, RoomCore } from './core';
+import { idleExpired, newRoomState, nextAlarm, ROOM_TTL_MS, RoomCore } from './core';
 import { parseClientMsg } from './protocol';
 
 function seeded(seed = 1) {
@@ -258,6 +258,74 @@ describe('RoomCore', () => {
       t.advance(Math.max(0, wake! - t.now));
     }
     expect(t.core.s.game!.phase).toBe('gameEnd');
+  });
+
+  it('nextAlarm never schedules in the past', () => {
+    // Past wake and sweep are dropped; expiry is still ahead.
+    expect(nextAlarm(1_000, 500, 0, 900, 10_000)).toBe(10_000);
+    // A future wake wins over later candidates.
+    expect(nextAlarm(1_000, 2_000, 0, 5_000, 10_000)).toBe(2_000);
+    // Floored at 50ms out.
+    expect(nextAlarm(1_000, 1_010, 0, null)).toBe(1_050);
+    // Past expiry with nothing else to do: recheck a TTL later, not every 50ms.
+    expect(nextAlarm(100_000, null, 0, null, 10_000)).toBe(110_000);
+    const r = seeded(3);
+    for (let i = 0; i < 1_000; i++) {
+      const now = Math.floor(r() * 1e9);
+      const pick = () => (r() < 0.3 ? null : now + Math.floor((r() - 0.5) * 2e6));
+      expect(nextAlarm(now, pick(), now + Math.floor((r() - 0.7) * 4e6), pick())).toBeGreaterThan(now);
+    }
+  });
+
+  it('a finished game left open past the TTL expires instead of spinning', () => {
+    // Regression: room UCF5 fired every 50ms while a tab sat on the results screen.
+    const t = setup(1, 2);
+    t.send(t.host, { type: 'setSettings', startCards: 1 });
+    t.send(t.host, { type: 'start' });
+    runToEnd(t);
+    expect(t.core.s.game!.phase).toBe('gameEnd');
+    const now = t.now + ROOM_TTL_MS + 1;
+    t.core.tick(now);
+    expect(idleExpired(t.core.s, now)).toBe(true);
+    const wake = t.core.nextWake();
+    expect(wake === null || wake > now).toBe(true);
+    expect(nextAlarm(now, wake, t.core.s.lastActivity, null)).toBeGreaterThan(now);
+  });
+
+  it('an idle room mid-game is not expired and does not spin', () => {
+    const t = setup(3, 0);
+    t.send(t.host, { type: 'start' });
+    const now = t.now + ROOM_TTL_MS + 1;
+    t.core.tick(now);
+    expect(idleExpired(t.core.s, now)).toBe(false);
+    expect(nextAlarm(now, t.core.nextWake(), t.core.s.lastActivity, null)).toBeGreaterThan(now);
+  });
+
+  it('drops a stale bot clock when an autoplay player takes their turn back', () => {
+    const t = setup(3, 0);
+    t.send(t.host, { type: 'start' });
+    t.advance(1);
+    const seat = t.core.s.game!.round.turn;
+    const actor = t.ids[seat];
+    t.send(t.host, { type: 'autoplay', id: actor, on: true });
+    expect(t.core.s.botDue).not.toBeNull();
+    t.core.join(`device-${seat}-xxxxxxxx`, 'back', t.now);
+    t.advance(5_000);
+    expect(t.core.s.game!.round.turn).toBe(seat);
+    expect(t.core.s.botDue).toBeNull();
+    const wake = t.core.nextWake();
+    expect(wake === null || wake > t.now).toBe(true);
+  });
+
+  it('drops a stale turn timer when autoplay takes over mid-turn', () => {
+    const t = setup(3, 0, { timer: 30 });
+    t.send(t.host, { type: 'start' });
+    t.advance(1);
+    expect(t.core.s.turnDeadline).not.toBeNull();
+    const seat = t.core.s.game!.round.turn;
+    t.send(t.host, { type: 'autoplay', id: t.ids[seat], on: true });
+    expect(t.core.s.turnDeadline).toBeNull();
+    expect(t.core.s.botDue).not.toBeNull();
   });
 
   it('rate-limits reactions', () => {

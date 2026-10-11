@@ -1,22 +1,23 @@
 import { Server, type Connection, type ConnectionContext, type WSMessage } from 'partyserver';
 import type { GameEvent, ServerMsg } from '@judgement/engine';
-import { newRoomState, RoomCore, type RoomState } from './core';
+import { idleExpired, newRoomState, nextAlarm, ROOM_TTL_MS, RoomCore, STALE_MS, type RoomState } from './core';
 import { parseClientMsg } from './protocol';
 import { gameEnded, gameStarted, log, roomCreated } from './metrics';
 
 /** `seen`: last time this socket proved it was alive (connect, message or fallback ping). */
 type ConnState = { playerId: string | null; seen: number };
-const ROOM_TTL_MS = 30 * 60_000;
-/** Clients ping every 1s on screen and every 10s in the background; a socket silent this long is treated as gone. */
-const STALE_MS = 30_000;
-/** How often a running game wakes up to look for silent sockets. */
-const SWEEP_MS = 10_000;
+/** More alarm runs than this in a minute means something keeps re-arming for nothing: back off. */
+const STORM_WINDOW_MS = 60_000;
+const STORM_MAX = 120;
+const STORM_BACKOFF_MS = 30_000;
 const PING = 'ping';
 const PONG = 'pong';
 
 export class Room extends Server<Env> {
   static override options = { hibernate: true };
   core: RoomCore | null = null;
+  /** When recent alarms ran, for the storm breaker. In memory only: resets on eviction, which is fine. */
+  private alarmRuns: number[] = [];
 
   override async onStart() {
     // Heartbeat: answered by the runtime without waking the hibernated room.
@@ -131,8 +132,19 @@ export class Room extends Server<Env> {
   override async onAlarm() {
     if (!this.core) return;
     const now = Date.now();
-    const anyone = [...this.getConnections()].length > 0;
-    if (!anyone && now - this.core.s.lastActivity >= ROOM_TTL_MS) {
+    this.alarmRuns = this.alarmRuns.filter((t) => now - t < STORM_WINDOW_MS);
+    this.alarmRuns.push(now);
+    const conns = [...this.getConnections()];
+    if (now - this.core.s.lastActivity >= ROOM_TTL_MS && (conns.length === 0 || idleExpired(this.core.s, now))) {
+      // A tab left open on the lobby or results screen keeps pinging but must not keep the room alive.
+      for (const c of conns) {
+        this.send(c, { type: 'no_room' });
+        try {
+          c.close(4004, 'no_room');
+        } catch {
+          /* already closed */
+        }
+      }
       this.abandonIfRunning(this.core.s.lastActivity);
       await this.ctx.storage.deleteAll();
       this.core = null;
@@ -158,7 +170,7 @@ export class Room extends Server<Env> {
     const core = this.core;
     if (!core || !this.watching()) return false;
     const conns = [...this.getConnections<ConnState>()];
-    const stale = conns.filter((c) => c.state?.playerId && now - this.lastSeen(c) > STALE_MS);
+    const stale = conns.filter((c) => c.state?.playerId && now - this.lastSeen(c) >= STALE_MS);
     let changed = false;
     for (const c of stale) {
       const pid = c.state!.playerId!;
@@ -190,6 +202,13 @@ export class Room extends Server<Env> {
   /** Last sign of life on a socket: an auto-answered ping, or anything that reached onMessage. */
   private lastSeen(c: Connection<ConnState>): number {
     return Math.max(this.autoPongAt(c) ?? 0, c.state?.seen ?? 0);
+  }
+
+  /** When the quietest player socket would go stale, if a running game is being watched. */
+  private sweepAt(): number | null {
+    if (!this.watching()) return null;
+    const seen = [...this.getConnections<ConnState>()].filter((c) => c.state?.playerId).map((c) => this.lastSeen(c));
+    return Math.min(...seen) + STALE_MS;
   }
 
   /** Whether a running game needs its sockets checked for liveness. */
@@ -242,9 +261,14 @@ export class Room extends Server<Env> {
   private async schedule(now: number) {
     const core = this.core;
     if (!core) return;
-    const expiry = core.s.lastActivity + ROOM_TTL_MS;
-    const times = [core.nextWake() ?? expiry, expiry];
-    if (this.watching()) times.push(now + SWEEP_MS);
-    await this.ctx.storage.setAlarm(Math.max(now + 50, Math.min(...times)));
+    const wake = core.nextWake();
+    // Always right after a tick, so a past wake is work tick() could not do.
+    if (wake !== null && wake <= now) log('wake_stuck', { room: this.name, lateMs: now - wake });
+    let at = nextAlarm(now, wake, core.s.lastActivity, this.sweepAt());
+    if (this.alarmRuns.length > STORM_MAX) {
+      log('alarm_storm', { room: this.name, count: this.alarmRuns.length });
+      at = Math.max(at, now + STORM_BACKOFF_MS);
+    }
+    await this.ctx.storage.setAlarm(at);
   }
 }
