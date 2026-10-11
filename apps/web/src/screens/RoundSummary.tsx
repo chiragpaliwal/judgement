@@ -6,6 +6,7 @@ import { serverNow, useRoom } from '../net/room';
 import { usePrefs } from '../lib/prefs';
 import { initialOf, seatNames } from '../game/seats';
 import { recapHeadline, recapLine } from '../game/narrate';
+import { ChatButton } from './Chat';
 import { Scoreboard, signed } from './Scoreboard';
 
 export function CountUp({ from, to, duration = 0.6, delay = 0 }: { from: number; to: number; duration?: number; delay?: number }) {
@@ -145,6 +146,7 @@ export function RoundSummary({ room, game }: { room: RoomView; game: GameView })
         )}
       </div>
       <div style={{ padding: '12px 12px calc(16px + var(--safe-b))', display: 'flex', gap: 8, flex: 'none' }}>
+        <ChatButton className="btn surf" style={{ width: 52, padding: 0, color: 'var(--text-2)', flex: 'none' }} />
         <button className="btn surf" style={{ width: 52, height: 54, padding: 0, color: 'var(--text-2)' }} aria-label="Full scoreboard" onClick={() => setScores(true)}>
           <Icon.Scores size={22} />
         </button>

@@ -371,3 +371,58 @@ h1, h2, h3, p { margin: 0; }
 .reduced .seat.turn .av { animation: none; box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--amber); }
 .reduced .seat.alive .av { animation: none; box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--amber); }
 .reduced .tc.think { animation: none; opacity: 0.8; }
+
+/* ---------- Table chat (DESIGN_SPEC §13) ---------- */
+.chatlayer { position: fixed; inset: 0; max-width: 430px; margin: 0 auto; pointer-events: none; z-index: 45; }
+.chatlayer > * { pointer-events: auto; }
+.chatbtn { position: relative; }
+.ub { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: var(--amber); color: var(--on-amber); font-size: 11px; font-weight: 500; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--bg); }
+.spk { position: absolute; right: -9px; bottom: -6px; width: 20px; height: 18px; border-radius: 9px; background: var(--text); display: flex; align-items: center; justify-content: center; gap: 2px; box-shadow: 0 0 0 2px var(--bg); z-index: 3; }
+.spk i { width: 3px; height: 3px; border-radius: 50%; background: var(--bg); }
+.ln { display: flex; align-items: baseline; gap: 7px; font-size: 13px; line-height: 1.3; min-width: 0; }
+.ln b { font-weight: 600; flex: none; }
+.ln .tx { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ln .when, .chatline .when { font-family: var(--mono); font-size: 10px; color: #6b717d; flex: none; }
+.ln.old { opacity: 0.5; }
+.ln.me b { color: var(--amber); }
+.recent { display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; border-radius: 14px; background: #14171c; }
+.qchips { display: flex; flex-wrap: wrap; gap: 8px; }
+.qchips.row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.qchips.row::-webkit-scrollbar { display: none; }
+.q { height: 36px; padding: 0 13px; border-radius: 18px; background: var(--surface-2); font-size: 13px; display: flex; align-items: center; white-space: nowrap; flex: none; }
+.q.ctx { box-shadow: inset 0 0 0 1.5px var(--amber); color: #f7c96b; background: #1e1a10; }
+.q:disabled { opacity: 0.4; }
+.cin { display: flex; gap: 8px; align-items: center; }
+.cfield { flex: 1; min-width: 0; height: 46px; border-radius: 23px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); border: 0; padding: 0 16px; font: inherit; font-size: 16px; color: var(--text); }
+.cfield::placeholder { color: #6b717d; }
+.csend { width: 46px; height: 46px; border-radius: 50%; background: var(--line); color: #6b717d; display: grid; place-items: center; flex: none; transition: background 0.15s, color 0.15s; }
+.csend.on { background: var(--amber); color: var(--on-amber); }
+.csend svg { width: 20px; height: 20px; }
+.cnote { font-size: 12px; color: var(--text-dim); text-align: center; margin: -6px 0 0; }
+.fullchat { font-size: 14px; color: var(--text-2); padding: 0 6px; height: 44px; }
+.bsheet.chatlog { top: 120px; padding-bottom: 0; gap: 12px; }
+.qtog { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #14171c; }
+.msgs { display: flex; flex-direction: column; gap: 12px; flex: 1 0 auto; }
+.ev { display: flex; align-items: center; gap: 10px; font-size: 11px; color: #7e8592; white-space: nowrap; }
+.ev::before, .ev::after { content: ""; flex: 1; height: 1px; background: var(--surface-3); }
+.ev span { display: flex; align-items: center; gap: 3px; }
+.ev svg { width: 10px; height: 10px; }
+.m { display: flex; gap: 9px; align-items: flex-start; }
+.m .a { width: 30px; height: 30px; border-radius: 50%; background: var(--surface-3); display: grid; place-items: center; font-size: 12px; font-weight: 600; flex: none; }
+.m.me .a { background: var(--amber); color: var(--on-amber); }
+.m .b { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.m .whorow { white-space: nowrap; font-size: 11px; font-weight: 600; color: var(--text-dim); }
+.m .who { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: pointer; }
+.m .tx { background: var(--surface-2); border-radius: 4px 14px 14px 14px; padding: 7px 11px; font-size: 14px; line-height: 1.35; width: max-content; max-width: min(280px, 100%); overflow-wrap: anywhere; }
+.m.me .tx { background: #3a2e12; }
+.m.rx .tx { background: none; padding: 0 2px; font-size: 22px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.m.hid .tx { background: none; padding: 0; font-size: 12px; color: var(--text-dim); font-style: italic; font-family: inherit; }
+.chatlog .foot { position: sticky; bottom: 0; margin: 0 -16px; padding: 8px 16px calc(16px + var(--safe-b)); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--surface-2); background: var(--surface-1); }
+.draft { margin: 8px 12px 0; height: 38px; border-radius: 19px; background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--line); display: flex; align-items: center; gap: 8px; padding: 0 4px 0 14px; font-size: 12px; flex: none; }
+.draft svg { width: 15px; height: 15px; color: var(--text-dim); flex: none; }
+.draft .tx { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }
+.draft button { height: 30px; padding: 0 12px; border-radius: 15px; background: var(--surface-2); font-size: 12px; font-weight: 600; }
+.chatline { display: flex; align-items: baseline; gap: 8px; min-width: 0; width: 100%; text-align: left; font: inherit; color: inherit; }
+.chatline b { flex: none; }
+.chatline .tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock .draft { position: absolute; left: 12px; right: 12px; bottom: 100%; margin: 0 0 4px; }

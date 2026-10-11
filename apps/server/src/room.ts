@@ -1,5 +1,5 @@
 import { Server, type Connection, type ConnectionContext, type WSMessage } from 'partyserver';
-import type { GameEvent, ServerMsg } from '@judgement/engine';
+import { CHAT_HISTORY, type ChatMsg, type GameEvent, type ServerMsg } from '@judgement/engine';
 import { idleExpired, newRoomState, nextAlarm, ROOM_TTL_MS, RoomCore, STALE_MS, type RoomState } from './core';
 import { parseClientMsg } from './protocol';
 import { gameEnded, gameStarted, log, roomCreated } from './metrics';
@@ -18,6 +18,8 @@ export class Room extends Server<Env> {
   core: RoomCore | null = null;
   /** When recent alarms ran, for the storm breaker. In memory only: resets on eviction, which is fine. */
   private alarmRuns: number[] = [];
+  /** Chat history, loaded on first use. Stored under its own key and written only when someone sends a message. */
+  private chat: ChatMsg[] | null = null;
 
   override async onStart() {
     // Heartbeat: answered by the runtime without waking the hibernated room.
@@ -33,6 +35,8 @@ export class Room extends Server<Env> {
       if (live) return new Response('taken', { status: 409 });
       this.abandonIfRunning(now);
       this.core = new RoomCore(newRoomState(this.name, now));
+      this.chat = [];
+      await this.ctx.storage.delete('chat');
       await this.commit([]);
       this.ctx.waitUntil(roomCreated(this.env.DB, this.name, now, req.headers.get('x-country')));
       return Response.json({ code: this.name });
@@ -86,6 +90,13 @@ export class Room extends Server<Env> {
     }
     conn.setState({ playerId: res.playerId, seen: now });
     await this.commit(this.core.tick(now));
+    const history = await this.loadChat();
+    if (history.length) this.send(conn, { type: 'chatHistory', msgs: history });
+  }
+
+  private async loadChat(): Promise<ChatMsg[]> {
+    this.chat ??= (await this.ctx.storage.get<ChatMsg[]>('chat')) ?? [];
+    return this.chat;
   }
 
   override async onMessage(conn: Connection<ConnState>, raw: WSMessage) {
@@ -104,6 +115,13 @@ export class Room extends Server<Env> {
     const out = this.core.handle(playerId, msg, Date.now());
     if (out.error && out.error !== 'slow_down') this.send(conn, { type: 'error', code: out.error });
     if (out.reaction) this.broadcastMsg({ type: 'reaction', ...out.reaction });
+    if (out.chat) {
+      const history = await this.loadChat();
+      const msg: ChatMsg = { id: (history[history.length - 1]?.id ?? 0) + 1, ...out.chat };
+      this.chat = [...history, msg].slice(-CHAT_HISTORY);
+      await this.ctx.storage.put('chat', this.chat);
+      this.broadcastMsg({ type: 'chat', msg });
+    }
     if (out.removed?.length) {
       for (const c of this.getConnections<ConnState>()) {
         if (c.state?.playerId && out.removed.includes(c.state.playerId)) {
@@ -148,6 +166,7 @@ export class Room extends Server<Env> {
       this.abandonIfRunning(this.core.s.lastActivity);
       await this.ctx.storage.deleteAll();
       this.core = null;
+      this.chat = null;
       return;
     }
     // How late the alarm ran relative to what it was set for (bot move, deal, grace…).

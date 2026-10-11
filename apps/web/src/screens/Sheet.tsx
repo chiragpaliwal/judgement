@@ -12,6 +12,8 @@ export function Sheet({
   children,
   variant = 'tall',
   label,
+  action,
+  className,
 }: {
   title: ReactNode;
   sub?: ReactNode;
@@ -19,6 +21,9 @@ export function Sheet({
   children: ReactNode;
   variant?: 'tall' | 'short' | 'full';
   label: string;
+  /** Extra control in the header, left of Close. */
+  action?: ReactNode;
+  className?: string;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -50,7 +55,7 @@ export function Sheet({
     <>
       <motion.div className="veil" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} />
       <motion.section
-        className={`bsheet${variant === 'short' ? ' short' : ''}`}
+        className={['bsheet', variant === 'short' && 'short', className].filter(Boolean).join(' ')}
         role="dialog"
         aria-modal
         aria-label={label}
@@ -74,6 +79,7 @@ export function Sheet({
             </span>
           )}
           <div style={{ flex: 1 }} />
+          {action}
           <button className="ib" aria-label="Close" onClick={onClose}>
             <Icon.X />
           </button>

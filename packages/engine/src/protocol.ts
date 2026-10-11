@@ -15,6 +15,22 @@ export const READY_DEAL_MS = 8_000;
 export const AUTO_DEAL_MS = 30_000;
 export const REACTION_COOLDOWN_MS = 2_000;
 export const NAME_MAX = 16;
+export const CHAT_MAX = 120;
+/** Messages kept for the room session. */
+export const CHAT_HISTORY = 150;
+/** Chat rate limit: one message per CHAT_RATE_MS, bursts of CHAT_BURST. */
+export const CHAT_RATE_MS = 1_000;
+export const CHAT_BURST = 3;
+
+export interface ChatMsg {
+  id: number;
+  from: string;
+  text: string;
+  at: number;
+  /** Round index and tricks completed when sent (trick null while bidding, both null outside a game); the log groups by these. */
+  round: number | null;
+  trick: number | null;
+}
 
 export interface MemberView {
   id: string;
@@ -51,6 +67,8 @@ export interface RoomView {
   autoDealAt: number | null;
   /** Game ended early by the host. */
   endedEarly: boolean;
+  /** Members the host muted for everyone. */
+  muted: string[];
   serverNow: number;
 }
 
@@ -58,13 +76,15 @@ export type ServerMsg =
   /** `seq` goes up by one with every state the room sends, so a client can tell whether it missed any. */
   | { type: 'state'; seq: number; room: RoomView; game: GameView | null; events: GameEvent[] }
   | { type: 'reaction'; from: string; emoji: Reaction }
+  | { type: 'chat'; msg: ChatMsg }
+  | { type: 'chatHistory'; msgs: ChatMsg[] }
   | { type: 'error'; code: string }
   | { type: 'locked'; reason: 'in_progress' | 'full' }
   | { type: 'no_room' }
   | { type: 'replaced' };
 
 export type ClientMsg =
-  | { type: 'setSettings'; startCards?: number; tracker?: boolean; turnTimer?: TurnTimer; scoring?: ScoringMode }
+  | { type: 'setSettings'; startCards?: number; tracker?: boolean; turnTimer?: TurnTimer; scoring?: ScoringMode; chat?: boolean }
   | { type: 'addBot' }
   | { type: 'removeMember'; id: string }
   | { type: 'start' }
@@ -75,6 +95,8 @@ export type ClientMsg =
   | { type: 'autoplay'; id: string; on: boolean }
   | { type: 'endGame' }
   | { type: 'react'; emoji: Reaction }
+  | { type: 'chat'; text: string }
+  | { type: 'mute'; id: string; on: boolean }
   | { type: 'rematch' }
   | { type: 'leave' };
 

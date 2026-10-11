@@ -5,6 +5,7 @@ import { useRoom } from '../net/room';
 import { Icon } from '../ui/icons';
 import { initialOf } from '../game/seats';
 import { MenuSheet } from './MenuSheet';
+import { ChatButton } from './Chat';
 import { copyText, shareOrCopy } from '../lib/share';
 
 /** 01 · Lobby. */
@@ -46,6 +47,7 @@ export function Lobby({ room }: { room: RoomView }) {
           · room
         </div>
         <div style={{ flex: 1 }} />
+        <ChatButton className="ib" />
         <button className="ib" aria-label="Room menu" onClick={() => setMenu(true)}>
           <Icon.More />
         </button>
@@ -152,6 +154,18 @@ export function Lobby({ room }: { room: RoomView }) {
               </div>
             </div>
             <button className={`tog${st.tracker ? ' on' : ''}`} role="switch" aria-checked={st.tracker} aria-label="Card tracker" disabled={!isHost} onClick={() => send({ type: 'setSettings', tracker: !st.tracker })}>
+              <i />
+            </button>
+            <div style={{ width: 10 }} />
+          </div>
+          <div className="set">
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Table chat</div>
+              <div className="dim" style={{ fontSize: 12 }}>
+                Messages and quick chips during the game
+              </div>
+            </div>
+            <button className={`tog${st.chat !== false ? ' on' : ''}`} role="switch" aria-checked={st.chat !== false} aria-label="Table chat" disabled={!isHost} onClick={() => send({ type: 'setSettings', chat: st.chat === false })}>
               <i />
             </button>
             <div style={{ width: 10 }} />

@@ -4,6 +4,9 @@ import {
   AUTO_DEAL_MS,
   botBid,
   botPlay,
+  CHAT_BURST,
+  CHAT_MAX,
+  CHAT_RATE_MS,
   createGame,
   DEFAULT_START_CARDS,
   GRACE_MS,
@@ -20,6 +23,7 @@ import {
   READY_DEAL_MS,
   viewFor as gameViewFor,
   type Action,
+  type ChatMsg,
   type ClientMsg,
   type GameEvent,
   type GameState,
@@ -39,6 +43,9 @@ export interface Member {
   autoplay: boolean;
   offlineSince: number | null;
   lastReaction: number;
+  /** Chat token bucket. Missing in rooms saved before chat existed. */
+  chatTokens?: number;
+  chatAt?: number;
 }
 
 export interface RoomState {
@@ -63,12 +70,16 @@ export interface RoomState {
   lastActivity: number;
   /** Number of the last state broadcast (see ServerMsg `seq`). Missing in rooms saved before it existed. */
   seq?: number;
+  /** Members the host muted for everyone. Missing in rooms saved before chat existed. */
+  muted?: string[];
 }
 
 export interface Outcome {
   events: GameEvent[];
   error?: string;
   reaction?: { from: string; emoji: Reaction };
+  /** A chat message to append to the history and broadcast; the room assigns its id. */
+  chat?: Omit<ChatMsg, 'id'>;
   /** Member ids removed by this message (their sockets should be closed). */
   removed?: string[];
   /** True if anything visible changed and a state broadcast is needed. */
@@ -110,7 +121,7 @@ export function newRoomState(code: string, now: number): RoomState {
     createdAt: now,
     hostId: '',
     members: [],
-    settings: { startCards: DEFAULT_START_CARDS, tracker: true, turnTimer: 0, scoring: 'classic' },
+    settings: { startCards: DEFAULT_START_CARDS, tracker: true, turnTimer: 0, scoring: 'classic', chat: true },
     stage: 'lobby',
     game: null,
     ready: [],
@@ -126,6 +137,11 @@ export function newRoomState(code: string, now: number): RoomState {
     seq: 0,
   };
 }
+
+const LINK = /https?:\/\/|www\./i;
+
+export const cleanChat = (raw: string) =>
+  raw.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX);
 
 export const cleanName = (raw: string) =>
   raw.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
@@ -277,7 +293,10 @@ export class RoomCore {
     switch (msg.type) {
       case 'setSettings': {
         if (!host) return this.err('host_only');
-        if (s.stage !== 'lobby') return this.err('wrong_stage');
+        // Chat can be switched at any time; everything else only in the lobby.
+        const chatOnly = msg.chat !== undefined && Object.keys(msg).every((k) => k === 'type' || k === 'chat');
+        if (s.stage !== 'lobby' && !chatOnly) return this.err('wrong_stage');
+        if (msg.chat !== undefined) s.settings.chat = msg.chat;
         if (msg.startCards !== undefined) s.settings.startCards = Math.max(1, Math.min(17, Math.round(msg.startCards)));
         if (msg.tracker !== undefined) s.settings.tracker = msg.tracker;
         if (msg.turnTimer !== undefined) s.settings.turnTimer = msg.turnTimer;
@@ -390,6 +409,28 @@ export class RoomCore {
         if (now - me.lastReaction < REACTION_COOLDOWN_MS) return { events: [], changed: false, error: 'slow_down' };
         me.lastReaction = now;
         return { events: [], changed: false, reaction: { from: playerId, emoji: msg.emoji } };
+      }
+      case 'chat': {
+        if (s.settings.chat === false) return { events: [], changed: false, error: 'chat_off' };
+        if (s.muted?.includes(playerId)) return { events: [], changed: false, error: 'muted' };
+        const text = cleanChat(msg.text);
+        if (!text) return { events: [], changed: false, error: 'bad_message' };
+        if (LINK.test(text)) return { events: [], changed: false, error: 'no_links' };
+        const tokens = Math.min(CHAT_BURST, (me.chatTokens ?? CHAT_BURST) + (now - (me.chatAt ?? 0)) / CHAT_RATE_MS);
+        if (tokens < 1) return { events: [], changed: false, error: 'slow_down' };
+        me.chatTokens = tokens - 1;
+        me.chatAt = now;
+        const g = s.stage === 'game' ? s.game : null;
+        // trick = tricks completed so far, null while bidding.
+        const trick = g && g.phase !== 'bidding' ? g.round.tricks.filter((t) => t.winner !== null).length : null;
+        return { events: [], changed: false, chat: { from: playerId, text, at: now, round: g ? g.round.index : null, trick } };
+      }
+      case 'mute': {
+        if (!host) return this.err('host_only');
+        if (msg.id === playerId || !this.member(msg.id)) return this.err('no_member');
+        const muted = (s.muted ?? []).filter((id) => id !== msg.id);
+        s.muted = msg.on ? [...muted, msg.id] : muted;
+        return this.ok();
       }
       case 'rematch': {
         if (s.stage !== 'game' || s.game?.phase !== 'gameEnd') return this.err('wrong_stage');
@@ -551,6 +592,7 @@ export class RoomCore {
       turnDeadline: s.pause ? null : s.turnDeadline,
       autoDealAt: s.game?.phase === 'roundEnd' ? s.autoDealAt : null,
       endedEarly: s.endedEarly,
+      muted: [...(s.muted ?? [])],
       serverNow: now,
     };
   }

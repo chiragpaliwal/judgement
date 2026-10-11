@@ -14,6 +14,8 @@ export interface Settings {
   turnTimer: TurnTimer;
   /** Absent on games saved before scoring modes existed: treat as classic. */
   scoring: ScoringMode;
+  /** Table chat on. Absent on rooms saved before it existed: treat as on. */
+  chat?: boolean;
 }
 
 export interface Play {

@@ -6,6 +6,7 @@ import { initialOf, seatNames } from '../game/seats';
 import { cap, joinNames, storyLine } from '../game/narrate';
 import { rankOrder, Scoreboard, signed } from './Scoreboard';
 import { Icon } from '../ui/icons';
+import { ChatButton } from './Chat';
 import { shareOrCopy } from '../lib/share';
 
 const OUT = [0.2, 0.8, 0.2, 1] as const;
@@ -97,6 +98,7 @@ export function Results({ room, game }: { room: RoomView; game: GameView }) {
         </section>
       </div>
       <div style={{ padding: '12px 12px calc(16px + var(--safe-b))', display: 'flex', gap: 8, flex: 'none' }}>
+        <ChatButton className="btn surf" style={{ width: 52, padding: 0, color: 'var(--text-2)', flex: 'none' }} />
         <button className="btn surf" style={{ width: 52, padding: 0, color: 'var(--text-2)' }} aria-label="Full scoreboard" onClick={() => setScores(true)}>
           <Icon.Scores size={22} />
         </button>

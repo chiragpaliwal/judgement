@@ -10,6 +10,8 @@ import { GameScreen } from './GameScreen';
 import { RoundSummary } from './RoundSummary';
 import { Results } from './Results';
 import { NameField } from './Home';
+import { ChatSheets } from './Chat';
+import { chatDisabled, useChat } from '../net/chat';
 
 function useCompact() {
   const [compact, set] = useState(() => window.innerWidth <= 360);
@@ -53,6 +55,14 @@ export function RoomPage({ code }: { code: string }) {
     inPlay && !room.pause && game.me !== null && game.round.turn === game.me && (game.phase === 'bidding' || game.phase === 'playing');
   useWakeLock(inPlay);
   useTurnTitle(myTurn);
+  const chatOn = room?.settings.chat !== false;
+  useEffect(() => {
+    if (!chatOn) chatDisabled();
+  }, [chatOn]);
+  // Your turn wins: chat sheets step aside and whatever was typed stays as a draft.
+  useEffect(() => {
+    if (myTurn && !held) useChat.getState().close();
+  }, [myTurn, held]);
 
   useEffect(() => {
     if (!named) return;
@@ -142,6 +152,7 @@ export function RoomPage({ code }: { code: string }) {
     <>
       {banner}
       <AnimatePresence mode="wait">{screen}</AnimatePresence>
+      <ChatSheets room={room} game={game} />
     </>
   );
 }

@@ -24,6 +24,8 @@ import { CardsSeen } from './CardsSeen';
 import { Scoreboard } from './Scoreboard';
 import { MenuSheet } from './MenuSheet';
 import { Paused } from './Paused';
+import { ChatButton, ChatFlashLine, DraftChip } from './Chat';
+import { useChat, type ChatEntry } from '../net/chat';
 
 export type Overlay = 'scores' | 'seen' | 'menu' | null;
 
@@ -64,45 +66,14 @@ export function ReactionDock({ disabled, pausedSet }: { disabled?: boolean; paus
   const send = useRoom((s) => s.send);
   const set = pausedSet ? (['😂', '👍', '😴', '👏', '😭', '😡'] as Reaction[]) : QUICK;
   return (
-    <div className="dock rxs" aria-label="Quick reactions">
+    <div className="dock rxs" aria-label="Chat and quick reactions">
+      <ChatButton />
       {set.map((e) => (
         <button key={e} className="rx" aria-label={REACTION_LABELS[e]} disabled={disabled} onClick={() => { send({ type: 'react', emoji: e }); haptic('light'); }}>
           {e}
         </button>
       ))}
     </div>
-  );
-}
-
-function ReactButton() {
-  const [open, setOpen] = useState(false);
-  const send = useRoom((s) => s.send);
-  return (
-    <>
-      <button className={`ib sq${open ? ' on' : ''}`} aria-label="Send a reaction" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <Icon.Smile />
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div className="rxpop" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.15 }}>
-            {QUICK.map((e) => (
-              <button
-                key={e}
-                className="rx"
-                aria-label={REACTION_LABELS[e]}
-                onClick={() => {
-                  send({ type: 'react', emoji: e });
-                  haptic('light');
-                  setOpen(false);
-                }}
-              >
-                {e}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
   );
 }
 
@@ -126,17 +97,32 @@ function useNoShrink(resetKey: string, enabled: boolean) {
 }
 
 /** The line above the hand. A toast briefly takes it over; the two crossfade and the height never changes. */
-function HandHeader({ toast, children }: { toast: { id: number; title: string; sub: string } | null; children?: React.ReactNode }) {
+function HandHeader({
+  toast,
+  flash,
+  room,
+  children,
+}: {
+  toast: { id: number; title: string; sub: string } | null;
+  /** Newest chat message; takes the line while you wait. The toast still wins. */
+  flash?: ChatEntry | null;
+  room?: RoomView;
+  children?: React.ReactNode;
+}) {
+  const chat = !toast && flash && room ? flash : null;
+  const key = toast ? `toast-${toast.id}` : chat ? `chat-${chat.id}` : 'line';
   return (
     <div className="hh">
       <AnimatePresence initial={false}>
-        <motion.div key={toast ? `toast-${toast.id}` : 'line'} className={toast ? 'out' : undefined} role={toast ? 'status' : undefined} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+        <motion.div key={key} className={toast ? 'out' : undefined} role={toast ? 'status' : undefined} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
           {toast ? (
             <>
               <Icon.Ban />
               <b>{toast.title}</b>
               <span className="dim">{toast.sub}</span>
             </>
+          ) : chat ? (
+            <ChatFlashLine room={room!} entry={chat} />
           ) : (
             children
           )}
@@ -151,6 +137,7 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
   const held = useRoom((s) => s.held);
   const toast = useRoom((s) => s.toast);
   const dealKey = useRoom((s) => s.dealKey);
+  const flash = useChat((s) => s.flash);
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [pendingBid, setPendingBid] = useState<number | null>(null);
   const [selected, setSelected] = useState<Card | null>(null);
@@ -260,7 +247,7 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
     );
     dock = (
       <div className="dock">
-        <ReactButton />
+        <ChatButton />
         <div className="btn ghost cta" role="status" style={{ fontSize: 15 }}>
           {status}
         </div>
@@ -294,7 +281,8 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
     );
     dock = (
       <div className="dock">
-        <ReactButton />
+        {!selected && <DraftChip />}
+        <ChatButton />
         {seenBtn}
         <button className={`btn cta ${selected ? 'amber' : 'ghost'}`} disabled={!selected} onClick={playSelected}>
           {selected ? `Play ${cardLabel(selected)}` : head.lead ? 'Pick a card to lead' : 'Pick a card'}
@@ -316,7 +304,7 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
       };
       lower = (
         <>
-          <HandHeader toast={toast} />
+          <HandHeader toast={toast} flash={flash} room={room} />
           <section className="moment" aria-label="What the last trick means">
             <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
               {head.title}{' '}
@@ -345,7 +333,7 @@ export function GameScreen({ room, game, compact }: { room: RoomView; game: Game
       lower = (
         <>
           {hand.length > 0 && (
-            <HandHeader toast={toast}>
+            <HandHeader toast={toast} flash={flash} room={room}>
               <b>Your hand</b>
               {game.phase === 'playing' && !held && !paused && <span className="dim">· {waitLine(game, names)}</span>}
             </HandHeader>

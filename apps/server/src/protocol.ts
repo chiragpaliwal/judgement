@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isCard, REACTIONS, type Card, type ClientMsg } from '@judgement/engine';
+import { CHAT_MAX, isCard, REACTIONS, type Card, type ClientMsg } from '@judgement/engine';
 
 const card = z.string().refine(isCard).transform((c) => c as Card);
 
@@ -10,6 +10,7 @@ const schema = z.discriminatedUnion('type', [
     tracker: z.boolean().optional(),
     turnTimer: z.union([z.literal(0), z.literal(30), z.literal(60)]).optional(),
     scoring: z.enum(['classic', 'stakes']).optional(),
+    chat: z.boolean().optional(),
   }),
   z.object({ type: z.literal('addBot') }),
   z.object({ type: z.literal('removeMember'), id: z.string().max(40) }),
@@ -21,6 +22,8 @@ const schema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('autoplay'), id: z.string().max(40), on: z.boolean() }),
   z.object({ type: z.literal('endGame') }),
   z.object({ type: z.literal('react'), emoji: z.enum(REACTIONS) }),
+  z.object({ type: z.literal('chat'), text: z.string().trim().min(1).max(CHAT_MAX) }),
+  z.object({ type: z.literal('mute'), id: z.string().max(40), on: z.boolean() }),
   z.object({ type: z.literal('rematch') }),
   z.object({ type: z.literal('leave') }),
 ]);

@@ -15,6 +15,7 @@ import { CardFace } from '../ui/Card';
 import { Icon } from '../ui/icons';
 import { usePrefs } from '../lib/prefs';
 import { serverNow, useRoom } from '../net/room';
+import { useChat } from '../net/chat';
 import { placePill, relSeat, tableLayout, type Point } from './geometry';
 import { bidNote, joinNames } from './narrate';
 import { buildSeats, seatNames, type SeatModel } from './seats';
@@ -39,6 +40,7 @@ export function Table({
   const [size, setSize] = useState({ w: 0, h: 0 });
   const held = useRoom((s) => s.held);
   const reactions = useRoom((s) => s.reactions);
+  const speaking = useChat((s) => s.speaking);
   const reduced = usePrefs((s) => s.reducedMotion);
   const [showLast, setShowLast] = useState(false);
 
@@ -176,6 +178,7 @@ export function Table({
               deadline={s.turn ? room.turnDeadline : null}
               timerTotal={room.settings.turnTimer * 1000}
               reaction={reactions.filter((x) => x.from === s.id).slice(-1)[0] ?? null}
+              speaking={speaking[s.id] ?? null}
               took={took?.seat === s.seat ? took.id : null}
               reduced={reduced}
             />
@@ -201,6 +204,7 @@ function Seat({
   deadline,
   timerTotal,
   reaction,
+  speaking,
   took,
   reduced,
 }: {
@@ -212,6 +216,8 @@ function Seat({
   deadline: number | null;
   timerTotal: number;
   reaction: { id: number; emoji: string } | null;
+  /** Id of the chat message that lit this seat's speech marker. */
+  speaking: number | null;
   /** Set (to a fresh id) as a won trick sweeps into this seat. */
   took: number | null;
   reduced: boolean;
@@ -255,6 +261,22 @@ function Seat({
             <Icon.Offline />
           </span>
         )}
+        <AnimatePresence>
+          {speaking !== null && !s.away && (
+            <motion.span
+              key="spk"
+              className="spk"
+              aria-hidden
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1, transition: { duration: 0.24, ease: 'easeOut' } }}
+              exit={{ opacity: 0, transition: { duration: 0.3 } }}
+            >
+              <i />
+              <i />
+              <i />
+            </motion.span>
+          )}
+        </AnimatePresence>
         <AnimatePresence>
           {reaction && (
             <motion.span

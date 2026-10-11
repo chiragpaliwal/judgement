@@ -334,6 +334,61 @@ describe('RoomCore', () => {
     expect(t.send(t.host, { type: 'react', emoji: '🔥' }).reaction).toBeUndefined();
   });
 
+  it('rate-limits chat to bursts of 3, refilling one per second', () => {
+    const t = setup(3, 0);
+    for (let i = 0; i < 3; i++) expect(t.send(t.host, { type: 'chat', text: `hi ${i}` }).chat).toBeTruthy();
+    expect(t.send(t.host, { type: 'chat', text: 'hi' }).error).toBe('slow_down');
+    t.advance(1_000);
+    expect(t.send(t.host, { type: 'chat', text: 'hi' }).chat).toBeTruthy();
+    expect(t.send(t.host, { type: 'chat', text: 'hi' }).error).toBe('slow_down');
+  });
+
+  it('cleans chat text and rejects links', () => {
+    const t = setup(3, 0);
+    expect(t.send(t.host, { type: 'chat', text: '  nice\n  one ' }).chat?.text).toBe('nice one');
+    expect(t.send(t.ids[1], { type: 'chat', text: 'see www.example.com' }).error).toBe('no_links');
+    expect(t.send(t.ids[1], { type: 'chat', text: 'https://x.y' }).error).toBe('no_links');
+  });
+
+  it('stamps chat with round and completed tricks', () => {
+    const t = setup(3, 0);
+    expect(t.send(t.host, { type: 'chat', text: 'lobby' }).chat).toMatchObject({ round: null, trick: null });
+    t.send(t.host, { type: 'start' });
+    t.advance(2_000);
+    expect(t.send(t.host, { type: 'chat', text: 'bidding' }).chat).toMatchObject({ round: 0, trick: null });
+    while (t.core.s.game!.phase === 'bidding') humanAct(t);
+    expect(t.send(t.ids[1], { type: 'chat', text: 'playing' }).chat).toMatchObject({ round: 0, trick: 0 });
+  });
+
+  it('host can turn chat off at any stage, and then messages are refused', () => {
+    const t = setup(3, 0);
+    expect(t.core.s.settings.chat).toBe(true);
+    expect(t.send(t.ids[1], { type: 'setSettings', chat: false }).error).toBe('host_only');
+    t.send(t.host, { type: 'start' });
+    expect(t.send(t.host, { type: 'setSettings', chat: false, tracker: false }).error).toBe('wrong_stage');
+    expect(t.send(t.host, { type: 'setSettings', chat: false }).error).toBeUndefined();
+    expect(t.core.roomView(t.ids[1], t.now).settings.chat).toBe(false);
+    expect(t.send(t.ids[1], { type: 'chat', text: 'hey' }).error).toBe('chat_off');
+    t.send(t.host, { type: 'setSettings', chat: true });
+    expect(t.send(t.ids[1], { type: 'chat', text: 'hey' }).chat).toBeTruthy();
+  });
+
+  it('lets only the host mute, and drops muted chat', () => {
+    const t = setup(3, 0);
+    expect(t.send(t.ids[1], { type: 'mute', id: t.ids[2], on: true }).error).toBe('host_only');
+    expect(t.send(t.host, { type: 'mute', id: t.ids[2], on: true }).changed).toBe(true);
+    expect(t.core.roomView(t.ids[0], t.now).muted).toEqual([t.ids[2]]);
+    expect(t.send(t.ids[2], { type: 'chat', text: 'hey' }).error).toBe('muted');
+    t.send(t.host, { type: 'mute', id: t.ids[2], on: false });
+    expect(t.send(t.ids[2], { type: 'chat', text: 'hey' }).chat).toBeTruthy();
+  });
+
+  it('parses chat messages within the length limit', () => {
+    expect(parseClientMsg(JSON.stringify({ type: 'chat', text: 'x'.repeat(120) }))).toBeTruthy();
+    expect(parseClientMsg(JSON.stringify({ type: 'chat', text: 'x'.repeat(121) }))).toBeNull();
+    expect(parseClientMsg(JSON.stringify({ type: 'chat', text: '   ' }))).toBeNull();
+  });
+
   it('never leaks other hands or device ids in views', () => {
     const t = setup(3, 0);
     t.send(t.host, { type: 'start' });

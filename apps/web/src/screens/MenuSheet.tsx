@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { GameView, RoomView } from '@judgement/engine';
 import { usePrefs } from '../lib/prefs';
 import { unlockAudio } from '../lib/fx';
@@ -16,6 +16,8 @@ export function MenuSheet({ room, game, onClose }: { room: RoomView; game: GameV
   const [howto, setHowto] = useState(false);
   const isHost = room.hostId === room.you;
   const inGame = room.stage === 'game' && game && game.phase !== 'gameEnd';
+  const chatOn = room.settings.chat !== false;
+  const others = room.members.filter((m) => !m.isBot && m.id !== room.you);
 
   const row = (label: string, sub: string | null, on: boolean, toggle: () => void) => (
     <div className="set" style={{ padding: '0 4px 0 4px' }}>
@@ -44,6 +46,21 @@ export function MenuSheet({ room, game, onClose }: { room: RoomView; game: GameV
           {row('Vibration', 'On phones that support it', prefs.haptics, () => prefs.set({ haptics: !prefs.haptics }))}
           {row('Reduced motion', 'Cards fade instead of flying', prefs.reducedMotion, () => prefs.set({ reducedMotion: !prefs.reducedMotion }))}
         </div>
+        {isHost && inGame && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {row('Table chat', 'Messages and quick chips for everyone', chatOn, () => send({ type: 'setSettings', chat: !chatOn }))}
+          </div>
+        )}
+        {isHost && chatOn && others.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="k" style={{ padding: '0 4px 4px' }}>
+              Mute in chat for everyone
+            </div>
+            {others.map((m) => (
+              <Fragment key={m.id}>{row(m.name, null, room.muted.includes(m.id), () => send({ type: 'mute', id: m.id, on: !room.muted.includes(m.id) }))}</Fragment>
+            ))}
+          </div>
+        )}
         <button className="btn surf2" onClick={() => setHowto(true)}>
           How to play
         </button>
