@@ -6,6 +6,7 @@ import {
   botPlay,
   CHAT_BURST,
   CHAT_MAX,
+  CHAT_LINK,
   CHAT_RATE_MS,
   createGame,
   DEFAULT_START_CARDS,
@@ -138,8 +139,6 @@ export function newRoomState(code: string, now: number): RoomState {
     seq: 0,
   };
 }
-
-const LINK = /https?:\/\/|www\./i;
 
 export const cleanChat = (raw: string) =>
   raw.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX);
@@ -418,7 +417,7 @@ export class RoomCore {
         if (s.muted?.includes(playerId)) return { events: [], changed: false, error: 'muted' };
         const text = cleanChat(msg.text);
         if (!text) return { events: [], changed: false, error: 'bad_message' };
-        if (LINK.test(text)) return { events: [], changed: false, error: 'no_links' };
+        if (CHAT_LINK.test(text)) return { events: [], changed: false, error: 'no_links' };
         const tokens = Math.min(CHAT_BURST, (me.chatTokens ?? CHAT_BURST) + (now - (me.chatAt ?? 0)) / CHAT_RATE_MS);
         if (tokens < 1) return { events: [], changed: false, error: 'slow_down' };
         me.chatTokens = tokens - 1;
@@ -426,7 +425,11 @@ export class RoomCore {
         const g = s.stage === 'game' ? s.game : null;
         // trick = tricks completed so far, null while bidding.
         const trick = g && g.phase !== 'bidding' ? g.round.tricks.filter((t) => t.winner !== null).length : null;
-        return { events: [], changed: false, chat: { from: playerId, text, at: now, round: g ? g.round.index : null, trick } };
+        return {
+          events: [],
+          changed: false,
+          chat: { from: playerId, name: me.name, game: g ? (s.gameStartedAt ?? null) : null, text, at: now, round: g ? g.round.index : null, trick },
+        };
       }
       case 'mute': {
         if (!host) return this.err('host_only');
@@ -596,6 +599,7 @@ export class RoomCore {
       autoDealAt: s.game?.phase === 'roundEnd' ? s.autoDealAt : null,
       endedEarly: s.endedEarly,
       muted: [...(s.muted ?? [])],
+      gameId: s.stage === 'game' ? (s.gameStartedAt ?? null) : null,
       serverNow: now,
     };
   }

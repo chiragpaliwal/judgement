@@ -14,7 +14,7 @@ import {
 import { deviceId, getName } from '../lib/identity';
 import { haptic, sfx } from '../lib/fx';
 import { FLUSH_BACKLOG, nextGap } from './pace';
-import { chatArrived, chatHistory, reactionEntry, resetChat } from './chat';
+import { chatArrived, chatHistory, chatServerError, reactionEntry, resetChat } from './chat';
 
 export type Issue = 'no_room' | 'in_progress' | 'full' | 'replaced' | 'removed' | 'left' | null;
 
@@ -88,7 +88,7 @@ export const useRoom = create<RoomStore>((set, get) => ({
     socket?.close();
     heart?.stop();
     resetQueue();
-    resetChat();
+    resetChat(code);
     set({ code, status: 'connecting', issue: null, room: null, game: null, held: null, toast: null });
     attempt = 0;
     dropReason = null;
@@ -291,6 +291,7 @@ function onMessage(msg: ServerMsg) {
     case 'error':
       if (msg.code === 'removed' || msg.code === 'left') set({ issue: msg.code });
       else set({ lastError: msg.code });
+      chatServerError(msg.code);
       return;
     case 'reaction': {
       const r = { id: ++seq, from: msg.from, emoji: msg.emoji };
@@ -299,14 +300,15 @@ function onMessage(msg: ServerMsg) {
       const { game, room } = useRoom.getState();
       const inGame = room?.stage === 'game' && game;
       const trick = inGame && game.phase !== 'bidding' ? game.round.tricksDone : null;
-      chatArrived(reactionEntry(msg.from, msg.emoji, inGame ? game.round.index : null, trick), room?.you ?? null);
+      const who = room?.members.find((m) => m.id === msg.from)?.name ?? 'Someone';
+      chatArrived(reactionEntry(msg.from, who, msg.emoji, room?.gameId ?? null, inGame ? game.round.index : null, trick), room?.you ?? null);
       return;
     }
     case 'chat':
       chatArrived(msg.msg, useRoom.getState().room?.you ?? null);
       return;
     case 'chatHistory':
-      chatHistory(msg.msgs);
+      chatHistory(msg.msgs, useRoom.getState().room?.you ?? null);
       return;
     case 'state':
       lastSeq = msg.seq ?? 0;

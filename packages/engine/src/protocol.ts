@@ -24,9 +24,16 @@ export const CHAT_HISTORY = 150;
 export const CHAT_RATE_MS = 1_000;
 export const CHAT_BURST = 3;
 
+/** Chat is plain text only: anything that looks like a link is refused. */
+export const CHAT_LINK = /https?:\/\/|www\./i;
+
 export interface ChatMsg {
   id: number;
   from: string;
+  /** Sender's name when it was sent, so the log still reads right after they leave. */
+  name: string;
+  /** Which game it was sent in (`RoomView.gameId`), null in the lobby. */
+  game: number | null;
   text: string;
   at: number;
   /** Round index and tricks completed when sent (trick null while bidding, both null outside a game); the log groups by these. */
@@ -73,6 +80,8 @@ export interface RoomView {
   endedEarly: boolean;
   /** Members the host muted for everyone. */
   muted: string[];
+  /** Identifies the running game (its start time); changes on every rematch. Null in the lobby. */
+  gameId: number | null;
   serverNow: number;
 }
 

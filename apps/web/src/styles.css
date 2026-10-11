@@ -333,6 +333,7 @@ h1, h2, h3, p { margin: 0; }
 .bsheet { position: absolute; left: 0; right: 0; bottom: 0; top: 56px; background: var(--surface-1); border-radius: 24px 24px 0 0; padding: 10px 16px calc(18px + var(--safe-b)); display: flex; flex-direction: column; gap: 16px; box-shadow: 0 -20px 40px rgba(0, 0, 0, 0.5); z-index: 41; overflow-y: auto; }
 .bsheet.short { top: auto; max-height: 85%; }
 .grab { width: 40px; height: 5px; border-radius: 3px; background: #3a404b; align-self: center; flex: none; }
+.shdwrap { display: flex; flex-direction: column; gap: 16px; flex: none; touch-action: none; }
 .shd { display: flex; align-items: center; gap: 10px; }
 .shd h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
 .full { position: absolute; inset: 0; background: var(--bg); z-index: 41; display: flex; flex-direction: column; overflow-y: auto; padding-top: var(--safe-t); }
@@ -373,7 +374,7 @@ h1, h2, h3, p { margin: 0; }
 .reduced .tc.think { animation: none; opacity: 0.8; }
 
 /* ---------- Table chat (DESIGN_SPEC §13) ---------- */
-.chatlayer { position: fixed; inset: 0; max-width: 430px; margin: 0 auto; pointer-events: none; z-index: 45; }
+.chatlayer { position: fixed; inset: 0; max-width: 430px; margin: 0 auto; pointer-events: none; z-index: 60; }
 .chatlayer > * { pointer-events: auto; }
 .chatbtn { position: relative; }
 .ub { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: var(--amber); color: var(--on-amber); font-size: 11px; font-weight: 500; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--bg); }
@@ -400,9 +401,12 @@ h1, h2, h3, p { margin: 0; }
 .csend svg { width: 20px; height: 20px; }
 .cnote { font-size: 12px; color: var(--text-dim); text-align: center; margin: -6px 0 0; }
 .fullchat { font-size: 14px; color: var(--text-2); padding: 0 6px; height: 44px; }
-.bsheet.chatlog { top: 120px; padding-bottom: 0; gap: 12px; }
+.bsheet.chatlog { top: 120px; padding-bottom: 0; gap: 12px; overflow: hidden; }
 .qtog { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #14171c; }
-.msgs { display: flex; flex-direction: column; gap: 12px; flex: 1 0 auto; }
+.msgswrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.msgs { display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.morepill { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); height: 34px; padding: 0 14px; border-radius: 17px; background: var(--amber); color: var(--on-amber); font-size: 13px; font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); }
+.cnotice { margin: 0; font-size: 13px; color: var(--coral); text-align: center; }
 .ev { display: flex; align-items: center; gap: 10px; font-size: 11px; color: #7e8592; white-space: nowrap; }
 .ev::before, .ev::after { content: ""; flex: 1; height: 1px; background: var(--surface-3); }
 .ev span { display: flex; align-items: center; gap: 3px; }
@@ -417,7 +421,7 @@ h1, h2, h3, p { margin: 0; }
 .m.me .tx { background: #3a2e12; }
 .m.rx .tx { background: none; padding: 0 2px; font-size: 22px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
 .m.hid .tx { background: none; padding: 0; font-size: 12px; color: var(--text-dim); font-style: italic; font-family: inherit; }
-.chatlog .foot { position: sticky; bottom: 0; margin: 0 -16px; padding: 8px 16px calc(16px + var(--safe-b)); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--surface-2); background: var(--surface-1); }
+.chatlog .foot { flex: none; margin: 0 -16px; padding: 8px 16px calc(16px + var(--safe-b)); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--surface-2); background: var(--surface-1); }
 .draft { margin: 8px 12px 0; height: 38px; border-radius: 19px; background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--line); display: flex; align-items: center; gap: 8px; padding: 0 4px 0 14px; font-size: 12px; flex: none; }
 .draft svg { width: 15px; height: 15px; color: var(--text-dim); flex: none; }
 .draft .tx { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }

@@ -381,6 +381,16 @@ describe('RoomCore', () => {
     expect(t.send(t.ids[1], { type: 'chat', text: 'hey' }).chat).toBeTruthy();
   });
 
+  it('stamps chat with the sender name and the game it belongs to', () => {
+    const t = setup(3, 0);
+    expect(t.send(t.ids[1], { type: 'chat', text: 'lobby' }).chat).toMatchObject({ name: 'P1', game: null });
+    expect(t.core.roomView(t.host, t.now).gameId).toBeNull();
+    t.send(t.host, { type: 'start' });
+    const id = t.core.roomView(t.host, t.now).gameId;
+    expect(id).toBeTypeOf('number');
+    expect(t.send(t.ids[1], { type: 'chat', text: 'in game' }).chat).toMatchObject({ name: 'P1', game: id });
+  });
+
   it('lets only the host mute, and drops muted chat', () => {
     const t = setup(3, 0);
     expect(t.send(t.ids[1], { type: 'mute', id: t.ids[2], on: true }).error).toBe('host_only');

@@ -11,7 +11,7 @@ import {
   type RoomView,
 } from '@judgement/engine';
 import { useRoom } from '../net/room';
-import { useChat, type ChatEntry } from '../net/chat';
+import { isEmojiOnly, mayChat, useChat, type ChatEntry } from '../net/chat';
 import { initialOf } from '../game/seats';
 import { haptic } from '../lib/fx';
 import { Icon, SuitIcon } from '../ui/icons';
@@ -24,6 +24,9 @@ const LONG_PRESS_MS = 500;
 export const useChatOn = () => useRoom((s) => s.room?.settings.chat !== false);
 
 const nameOf = (room: RoomView, id: string) => (id === room.you ? 'You' : (room.members.find((m) => m.id === id)?.name ?? 'Someone'));
+
+/** Who sent an entry: the current member name, or the name stored with the message if they have left. */
+const entryName = (room: RoomView, e: ChatEntry) => (e.from === room.you ? 'You' : (room.members.find((m) => m.id === e.from)?.name ?? e.name ?? 'Someone'));
 
 export function ago(at: number, now = Date.now()) {
   const s = Math.max(0, Math.round((now - at) / 1000));
@@ -50,12 +53,21 @@ export function contextChips(room: RoomView, game: GameView | null): string[] {
 }
 
 /** Thin centred separators between log groups: round start, bids in, each trick's winner. */
-function separators(prev: ChatEntry | null, cur: ChatEntry, room: RoomView, game: GameView | null): React.ReactNode[] {
-  if (cur.round === null || !game) return [];
+function separators(prev: ChatEntry | null, cur: ChatEntry, firstGame: number | null, room: RoomView, game: GameView | null): React.ReactNode[] {
   const out: React.ReactNode[] = [];
+  const gid = cur.game ?? null;
+  const pgid = prev ? (prev.game ?? null) : null;
+  // A rematch reuses the room: mark where each later game starts.
+  if (gid !== null && gid !== pgid && gid !== firstGame) out.push('New game');
+  if (cur.round === null) return out;
+  const newRound = !prev || prev.round !== cur.round || pgid !== gid;
+  // Only the running game's round data is known; messages from earlier games just get a round label.
+  if (!game || gid === null || gid !== room.gameId) {
+    if (newRound) out.push(`Round ${cur.round + 1}`);
+    return out;
+  }
   const r = game.round;
   const rec = cur.round === r.index ? { cards: r.cards, trump: r.trump, bids: r.bids } : game.history[cur.round];
-  const newRound = !prev || prev.round !== cur.round;
   if (newRound && rec) {
     out.push(
       <>
@@ -99,7 +111,7 @@ function useSend() {
   const send = useRoom((s) => s.send);
   return (text: string) => {
     const t = text.trim().slice(0, CHAT_MAX);
-    if (!t) return false;
+    if (!t || !mayChat(t)) return false;
     send({ type: 'chat', text: t });
     haptic('light');
     return true;
@@ -115,28 +127,36 @@ function Field({ placeholder, disabled, onSent }: { placeholder: string; disable
     setDraft('');
     onSent?.();
   };
+  const notice = useChat((s) => s.notice);
   return (
-    <form
-      className="cin"
-      onSubmit={(e) => {
-        e.preventDefault();
-        submit();
-      }}
-    >
-      <input
-        className="cfield"
-        value={draft}
-        maxLength={CHAT_MAX}
-        placeholder={disabled ? 'The host muted you' : placeholder}
-        disabled={disabled}
-        enterKeyHint="send"
-        aria-label="Message"
-        onChange={(e) => setDraft(e.target.value)}
-      />
-      <button className={`csend${draft.trim() ? ' on' : ''}`} type="submit" aria-label="Send" disabled={disabled || !draft.trim()}>
-        <Icon.Send />
-      </button>
-    </form>
+    <>
+      {notice && (
+        <p className="cnotice" role="status">
+          {notice}
+        </p>
+      )}
+      <form
+        className="cin"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <input
+          className="cfield"
+          value={draft}
+          maxLength={CHAT_MAX}
+          placeholder={disabled ? 'The host muted you' : placeholder}
+          disabled={disabled}
+          enterKeyHint="send"
+          aria-label="Message"
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <button className={`csend${draft.trim() ? ' on' : ''}`} type="submit" aria-label="Send" disabled={disabled || !draft.trim()}>
+          <Icon.Send />
+        </button>
+      </form>
+    </>
   );
 }
 
@@ -166,7 +186,7 @@ function RecentLines({ room, entries }: { room: RoomView; entries: ChatEntry[] }
     <div className="recent" aria-live="polite">
       {entries.map((e, i) => (
         <div key={`${e.id}-${e.at}`} className={`ln${i < entries.length - 1 ? ' old' : ''}${e.from === room.you ? ' me' : ''}`}>
-          <b>{nameOf(room, e.from)}</b>
+          <b>{entryName(room, e)}</b>
           <span className="tx">{e.text}</span>
           <span className="when">{ago(e.at)}</span>
         </div>
@@ -201,7 +221,7 @@ function Composer({ room, game, onClose }: { room: RoomView; game: GameView | nu
   );
 }
 
-function LogName({ room, id }: { room: RoomView; id: string }) {
+function LogName({ id, name, you }: { id: string; name: string; you: boolean }) {
   const toggleMute = useChat((s) => s.toggleMute);
   const muted = useChat((s) => s.muted.includes(id));
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -209,13 +229,13 @@ function LogName({ room, id }: { room: RoomView; id: string }) {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
   };
-  if (id === room.you) return <span className="who">You</span>;
+  if (you) return <span className="who">You</span>;
   return (
     <span
       className="who"
       role="button"
       tabIndex={0}
-      aria-label={`${nameOf(room, id)}${muted ? ', muted' : ''}. Long-press to ${muted ? 'unmute' : 'mute'}`}
+      aria-label={`${name}${muted ? ', muted' : ''}. Long-press to ${muted ? 'unmute' : 'mute'}`}
       onPointerDown={() => {
         cancel();
         timer.current = setTimeout(() => {
@@ -228,7 +248,7 @@ function LogName({ room, id }: { room: RoomView; id: string }) {
       onContextMenu={(e) => e.preventDefault()}
       onKeyDown={(e) => e.key === 'Enter' && toggleMute(id)}
     >
-      {nameOf(room, id)}
+      {name}
       {muted && ' · muted'}
     </span>
   );
@@ -239,17 +259,28 @@ function ChatLog({ room, game, onClose }: { room: RoomView; game: GameView | nul
   const muted = useChat((s) => s.muted);
   const onTable = useChat((s) => s.onTable);
   const setOnTable = useChat((s) => s.setOnTable);
-  const endRef = useRef<HTMLDivElement>(null);
+  const msgsRef = useRef<HTMLDivElement>(null);
+  const atBottom = useRef(true);
+  const [more, setMore] = useState(false);
   const hostMuted = !!room.you && room.muted.includes(room.you);
   const humans = room.members.filter((m) => !m.isBot).length;
+  const toBottom = () => {
+    const el = msgsRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    setMore(false);
+  };
+  // Follow new messages only while reading the latest ones (or after sending); otherwise offer a jump.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' });
+    const last = log[log.length - 1];
+    if (atBottom.current || last?.from === room.you) toBottom();
+    else if (last && !last.reaction) setMore(true);
   }, [log.length]);
 
   const rows: React.ReactNode[] = [];
+  const firstGame = log.find((e) => (e.game ?? null) !== null)?.game ?? null;
   log.forEach((e, i) => {
     const prev = i > 0 ? log[i - 1] : null;
-    separators(prev, e, room, game).forEach((sep, j) =>
+    separators(prev, e, firstGame, room, game).forEach((sep, j) =>
       rows.push(
         <div key={`sep-${e.id}-${e.at}-${j}`} className="ev">
           <span>{sep}</span>
@@ -258,13 +289,13 @@ function ChatLog({ room, game, onClose }: { room: RoomView; game: GameView | nul
     );
     const hidden = muted.includes(e.from);
     const mine = e.from === room.you;
-    const dealer = game && e.round !== null && e.round === game.round.index && room.members[game.round.dealer]?.id === e.from;
+    const dealer = game && e.game === room.gameId && e.round !== null && e.round === game.round.index && room.members[game.round.dealer]?.id === e.from;
     rows.push(
-      <div key={`${e.id}-${e.at}`} className={`m${mine ? ' me' : ''}${e.reaction ? ' rx' : ''}${hidden ? ' hid' : ''}`}>
-        <div className="a">{initialOf(nameOf(room, e.from))}</div>
+      <div key={`${e.id}-${e.at}`} className={`m${mine ? ' me' : ''}${e.reaction || isEmojiOnly(e.text) ? ' rx' : ''}${hidden ? ' hid' : ''}`}>
+        <div className="a">{initialOf(entryName(room, e))}</div>
         <div className="b">
           <div className="whorow">
-            <LogName room={room} id={e.from} />
+            <LogName id={e.from} name={entryName(room, e)} you={e.from === room.you} />
             {dealer && <span className="dim"> · dealer</span>}
             {i === log.length - 1 && <span className="dim"> · {ago(e.at)}</span>}
           </div>
@@ -287,9 +318,24 @@ function ChatLog({ room, game, onClose }: { room: RoomView; game: GameView | nul
           <i />
         </button>
       </div>
-      <div className="msgs" aria-live="polite">
-        {rows.length ? rows : <p className="dim" style={{ fontSize: 14, textAlign: 'center', padding: 24 }}>No messages yet. Say hi.</p>}
-        <div ref={endRef} />
+      <div className="msgswrap">
+        <div
+          className="msgs"
+          aria-live="polite"
+          ref={msgsRef}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+            if (atBottom.current) setMore(false);
+          }}
+        >
+          {rows.length ? rows : <p className="dim" style={{ fontSize: 14, textAlign: 'center', padding: 24 }}>No messages yet. Say hi.</p>}
+        </div>
+        {more && (
+          <button className="morepill" onClick={toBottom}>
+            ↓ New messages
+          </button>
+        )}
       </div>
       <div className="foot">
         <Chips room={room} game={game} row disabled={hostMuted} />
@@ -342,8 +388,8 @@ export function ChatFlashLine({ room, entry }: { room: RoomView; entry: ChatEntr
     return () => clearInterval(t);
   }, []);
   return (
-    <button className="chatline" onClick={() => open('log')} aria-label={`${nameOf(room, entry.from)} said ${entry.text}. Open chat`}>
-      <b>{nameOf(room, entry.from)}</b>
+    <button className="chatline" onClick={() => open('log')} aria-label={`${entryName(room, entry)} said ${entry.text}. Open chat`}>
+      <b>{entryName(room, entry)}</b>
       <span className="tx">{entry.text}</span>
       <span className="when">{ago(entry.at)}</span>
     </button>

@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import { motion } from 'motion/react';
+import { motion, useDragControls } from 'motion/react';
 import { Icon } from '../ui/icons';
 
 const OUT = [0.2, 0.8, 0.2, 1] as const;
@@ -25,6 +25,8 @@ export function Sheet({
   action?: ReactNode;
   className?: string;
 }) {
+  // Only the grab handle and header start a dismiss drag, so scrolling the content never moves the sheet.
+  const drag = useDragControls();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -64,25 +66,29 @@ export function Sheet({
         exit={{ y: '100%' }}
         transition={{ duration: 0.3, ease: OUT }}
         drag="y"
+        dragListener={false}
+        dragControls={drag}
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={{ top: 0, bottom: 0.6 }}
         onDragEnd={(_, info) => {
           if (info.offset.y > 120 || info.velocity.y > 600) onClose();
         }}
       >
-        <div className="grab" />
-        <div className="shd">
-          <h2>{title}</h2>
-          {sub && (
-            <span className="dim" style={{ fontSize: 14 }}>
-              {sub}
-            </span>
-          )}
-          <div style={{ flex: 1 }} />
-          {action}
-          <button className="ib" aria-label="Close" onClick={onClose}>
-            <Icon.X />
-          </button>
+        <div className="shdwrap" onPointerDown={(e) => drag.start(e)}>
+          <div className="grab" />
+          <div className="shd">
+            <h2>{title}</h2>
+            {sub && (
+              <span className="dim" style={{ fontSize: 14 }}>
+                {sub}
+              </span>
+            )}
+            <div style={{ flex: 1 }} />
+            {action}
+            <button className="ib" aria-label="Close" onClick={onClose}>
+              <Icon.X />
+            </button>
+          </div>
         </div>
         {children}
       </motion.section>
