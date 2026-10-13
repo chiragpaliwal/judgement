@@ -74,6 +74,8 @@ export interface RoomState {
   seq?: number;
   /** Members the host muted for everyone. Missing in rooms saved before chat existed. */
   muted?: string[];
+  /** Member who dealt first in the previous game, so a rematch passes the deal on. Missing in older rooms. */
+  lastFirstDealer?: string | null;
 }
 
 export interface Outcome {
@@ -335,7 +337,11 @@ export class RoomCore {
         if (s.members.length < MIN_PLAYERS) return this.err('need_players');
         const n = s.members.length;
         const seed = Math.floor(this.rand() * 2 ** 32);
-        const { state, events } = createGame(n, s.settings, seed, Math.floor(this.rand() * n));
+        // Rotate the first deal after a rematch; random for a fresh room or if last game's dealer has left.
+        const prev = s.members.findIndex((m) => m.id === s.lastFirstDealer);
+        const firstDealer = prev >= 0 ? (prev + 1) % n : Math.floor(this.rand() * n);
+        s.lastFirstDealer = s.members[firstDealer].id;
+        const { state, events } = createGame(n, s.settings, seed, firstDealer);
         s.game = state;
         s.stage = 'game';
         s.gameStartedAt = now;
