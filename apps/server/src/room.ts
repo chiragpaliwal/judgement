@@ -4,8 +4,11 @@ import { idleExpired, newRoomState, nextAlarm, ROOM_TTL_MS, RoomCore, STALE_MS, 
 import { parseClientMsg } from './protocol';
 import { gameEnded, gameStarted, log, roomCreated } from './metrics';
 
-/** `seen`: last time this socket proved it was alive (connect, message or fallback ping). */
-type ConnState = { playerId: string | null; seen: number };
+/**
+ * `seen`: last time this socket proved it was alive (connect, message or fallback ping).
+ * `sid`: unique per socket. `conn.id` is not: partysocket reuses it on every reconnect from the same page.
+ */
+type ConnState = { playerId: string | null; seen: number; sid: string };
 /** More alarm runs than this in a minute means something keeps re-arming for nothing: back off. */
 const STORM_WINDOW_MS = 60_000;
 const STORM_MAX = 120;
@@ -63,7 +66,8 @@ export class Room extends Server<Env> {
       seq: this.core?.s.seq ?? null,
       colo: (ctx.request.cf as { colo?: string } | undefined)?.colo ?? null,
     });
-    conn.setState({ playerId: null, seen: Date.now() });
+    const sid = crypto.randomUUID();
+    conn.setState({ playerId: null, seen: Date.now(), sid });
     if (!this.core) {
       this.send(conn, { type: 'no_room' });
       conn.close(4004, 'no_room');
@@ -82,13 +86,22 @@ export class Room extends Server<Env> {
       return;
     }
     for (const c of this.getConnections<ConnState>()) {
-      if (c.id !== conn.id && c.state?.playerId === res.playerId) {
-        c.setState({ playerId: null, seen: c.state?.seen ?? now });
+      if (c.state?.sid === sid || c.state?.playerId !== res.playerId) continue;
+      c.setState({ ...c.state, playerId: null });
+      if (c.id === conn.id) {
+        // An earlier socket from this same page that never closed (half-open after a drop). The page has
+        // already moved on, so drop it quietly; its late close must not mark the player offline.
+        try {
+          c.close(1000, 'superseded');
+        } catch {
+          /* already closed */
+        }
+      } else {
         this.send(c, { type: 'replaced' });
         c.close(4001, 'replaced');
       }
     }
-    conn.setState({ playerId: res.playerId, seen: now });
+    conn.setState({ playerId: res.playerId, seen: now, sid });
     await this.commit(this.core.tick(now));
     const history = await this.loadChat();
     if (history.length) this.send(conn, { type: 'chatHistory', msgs: history });
@@ -101,7 +114,7 @@ export class Room extends Server<Env> {
 
   override async onMessage(conn: Connection<ConnState>, raw: WSMessage) {
     const playerId = conn.state?.playerId ?? null;
-    conn.setState({ playerId, seen: Date.now() });
+    conn.setState({ playerId, seen: Date.now(), sid: conn.state?.sid ?? '' });
     if (raw === PING) {
       this.send(conn, PONG);
       return;
@@ -125,7 +138,7 @@ export class Room extends Server<Env> {
     if (out.removed?.length) {
       for (const c of this.getConnections<ConnState>()) {
         if (c.state?.playerId && out.removed.includes(c.state.playerId)) {
-          c.setState({ playerId: null, seen: c.state?.seen ?? Date.now() });
+          c.setState({ playerId: null, seen: c.state?.seen ?? Date.now(), sid: c.state?.sid ?? '' });
           this.send(c, { type: 'error', code: msg.type === 'leave' ? 'left' : 'removed' });
           c.close(4002, 'removed');
         }
@@ -138,8 +151,9 @@ export class Room extends Server<Env> {
     const playerId = conn.state?.playerId;
     log('close', { room: this.name, conn: conn.id, player: playerId ?? null, code, reason, quietMs: Date.now() - this.lastSeen(conn) });
     if (!playerId || !this.core) return;
+    const sid = conn.state?.sid;
     const stillHere = [...this.getConnections<ConnState>()].some(
-      (c) => c.id !== conn.id && c.state?.playerId === playerId,
+      (c) => c.state?.sid !== sid && c.state?.playerId === playerId,
     );
     if (stillHere) return;
     const now = Date.now();
@@ -194,7 +208,7 @@ export class Room extends Server<Env> {
     for (const c of stale) {
       const pid = c.state!.playerId!;
       log('sweep', { room: this.name, conn: c.id, player: pid, quietMs: now - this.lastSeen(c), autoPong: this.autoPongAt(c) });
-      c.setState({ playerId: null, seen: c.state!.seen });
+      c.setState({ ...c.state!, playerId: null });
       try {
         c.close(4100, 'stale');
       } catch {
