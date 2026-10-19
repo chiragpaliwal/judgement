@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
+import type { GameView, RoomView } from '@judgement/engine';
 import { useRoom } from '../net/room';
 import { getName, setName } from '../lib/identity';
 import { navigate } from '../lib/router';
@@ -51,6 +52,18 @@ export function RoomPage({ code }: { code: string }) {
   const held = useRoom((s) => s.held);
   const compact = useCompact();
   const inPlay = room?.stage === 'game' && !!game && game.phase !== 'gameEnd';
+  // Final results stay on this phone until its player leaves them, even after someone else's
+  // rematch sends the room back to the lobby and the server drops the game.
+  const [finale, setFinale] = useState<{ room: RoomView; game: GameView } | null>(null);
+  const [finaleDone, setFinaleDone] = useState(false);
+  const liveEnd = room?.stage === 'game' && game?.phase === 'gameEnd';
+  useEffect(() => {
+    if (liveEnd && !finaleDone) setFinale({ room: room!, game: game! });
+    if (inPlay) {
+      setFinale(null);
+      setFinaleDone(false);
+    }
+  }, [room, game, liveEnd, inPlay, finaleDone]);
   const myTurn =
     inPlay && !room.pause && game.me !== null && game.round.turn === game.me && (game.phase === 'bidding' || game.phase === 'playing');
   useWakeLock(inPlay);
@@ -143,8 +156,14 @@ export function RoomPage({ code }: { code: string }) {
   );
 
   let screen: React.ReactNode;
-  if (room.stage === 'lobby' || !game) screen = <Lobby key="lobby" room={room} />;
-  else if (game.phase === 'gameEnd' && !held) screen = <Results key={`results`} room={room} game={game} />;
+  const leaveResults = () => {
+    setFinaleDone(true);
+    setFinale(null);
+  };
+  if (finale && !finaleDone && !inPlay && !(liveEnd && held))
+    screen = <Results key="results" room={liveEnd ? room : finale.room} game={liveEnd ? game! : finale.game} live={liveEnd} onLeave={leaveResults} />;
+  else if (room.stage === 'lobby' || !game) screen = <Lobby key="lobby" room={room} />;
+  else if (game.phase === 'gameEnd' && !held) screen = <Results key="results" room={room} game={game} live onLeave={leaveResults} />;
   else if (game.phase === 'roundEnd' && !held) screen = <RoundSummary key={`sum-${game.round.index}`} room={room} game={game} />;
   else screen = <GameScreen key="game" room={room} game={game} compact={compact} />;
 

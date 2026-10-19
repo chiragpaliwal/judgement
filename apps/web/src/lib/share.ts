@@ -49,3 +49,33 @@ export async function shareOrCopy(data: { title: string; text: string; url?: str
   const text = data.url ? `${data.text}\n${data.url}` : data.text;
   return (await copyText(text)) ? 'copied' : 'failed';
 }
+
+/**
+ * Snapshot a DOM node to PNG and open the share sheet with it. Returns 'failed' when the
+ * image couldn't be made or handed off, so the caller can fall back to sharing text.
+ */
+export async function shareImage(
+  node: HTMLElement,
+  data: { title: string; text: string; filename: string },
+): Promise<'shared' | 'copied' | 'cancelled' | 'failed'> {
+  let blob: Blob | null;
+  try {
+    // Lazy: html-to-image is only needed on the results screen.
+    const { toBlob } = await import('html-to-image');
+    blob = await toBlob(node, { pixelRatio: Math.min(3, window.devicePixelRatio || 2), cacheBust: true });
+  } catch {
+    return 'failed';
+  }
+  if (!blob) return 'failed';
+  const file = new File([blob], data.filename, { type: 'image/png' });
+  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: data.title });
+      return 'shared';
+    } catch (e) {
+      if ((e as Error)?.name === 'AbortError') return 'cancelled';
+    }
+  }
+  // TODO(human): no file sharing here (desktop browsers, http LAN dev). Decide the fallback.
+  return 'failed';
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { GameView, RoomView } from '@judgement/engine';
 import { useRoom } from '../net/room';
@@ -7,15 +7,17 @@ import { cap, joinNames, storyLine } from '../game/narrate';
 import { rankOrder, Scoreboard, signed } from './Scoreboard';
 import { Icon } from '../ui/icons';
 import { ChatButton } from './Chat';
-import { shareOrCopy } from '../lib/share';
+import { shareImage, shareOrCopy } from '../lib/share';
 
 const OUT = [0.2, 0.8, 0.2, 1] as const;
 
 /** 11 · Final results. */
-export function Results({ room, game }: { room: RoomView; game: GameView }) {
+export function Results({ room, game, live, onLeave }: { room: RoomView; game: GameView; live: boolean; onLeave: () => void }) {
   const send = useRoom((s) => s.send);
   const [scores, setScores] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const card = useRef<HTMLDivElement>(null);
   const names = seatNames(room, game);
   const order = rankOrder(game.totals);
   const top = game.totals[order[0]];
@@ -38,7 +40,16 @@ export function Results({ room, game }: { room: RoomView; game: GameView }) {
   const share = async () => {
     const lines = order.map((s) => `${rank(s)}. ${room.members[s].name} ${signed(game.totals[s])}`).join('\n');
     const text = `Judgement · ${rounds} rounds\n${lines}`;
-    const r = await shareOrCopy({ title: 'Judgement results', text });
+    let r: Awaited<ReturnType<typeof shareOrCopy>> = 'failed';
+    if (card.current && !busy) {
+      setBusy(true);
+      try {
+        r = await shareImage(card.current, { title: 'Judgement results', text, filename: `judgement-${room.code}.png` });
+      } finally {
+        setBusy(false);
+      }
+    }
+    if (r === 'failed') r = await shareOrCopy({ title: 'Judgement results', text });
     if (r === 'copied') {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
@@ -49,64 +60,73 @@ export function Results({ room, game }: { room: RoomView; game: GameView }) {
     <motion.main className="scr" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
       {meWon && <Confetti />}
       <div className="scroll" style={{ flex: '1 1 auto' }}>
-        <header style={{ padding: '26px 20px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div className="k">
-            Game over · {rounds} {rounds === 1 ? 'round' : 'rounds'}
-            {room.endedEarly ? ' · ended early' : ''}
+        <div ref={card} style={{ background: 'var(--bg)', paddingBottom: 4 }}>
+          <header style={{ padding: '26px 20px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="k">
+              Game over · {rounds} {rounds === 1 ? 'round' : 'rounds'}
+              {room.endedEarly ? ' · ended early' : ''}
+            </div>
+            <motion.h1 initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.4, ease: OUT }} style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
+              {headline}
+              <span className="mono" style={{ color: 'var(--amber)', fontSize: 34, fontWeight: 500, letterSpacing: 0 }}>
+                {top}
+              </span>
+            </motion.h1>
+            <div className="dim" style={{ fontSize: 15, lineHeight: 1.4 }}>
+              {cap(storyLine(game.history, names))}
+            </div>
+          </header>
+          {rounds > 0 && <Race game={game} names={names} order={order} />}
+          <div className="k" style={{ display: 'flex', padding: '18px 24px 6px', gap: 10 }}>
+            <span style={{ flex: 1 }} />
+            <span style={{ width: 54, textAlign: 'right' }}>Exact</span>
+            <span style={{ width: 44, textAlign: 'right' }}>Pts</span>
           </div>
-          <motion.h1 initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.4, ease: OUT }} style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
-            {headline}
-            <span className="mono" style={{ color: 'var(--amber)', fontSize: 34, fontWeight: 500, letterSpacing: 0 }}>
-              {top}
-            </span>
-          </motion.h1>
-          <div className="dim" style={{ fontSize: 15, lineHeight: 1.4 }}>
-            {cap(storyLine(game.history, names))}
-          </div>
-        </header>
-        {rounds > 0 && <Race game={game} names={names} order={order} />}
-        <div className="k" style={{ display: 'flex', padding: '18px 24px 6px', gap: 10 }}>
-          <span style={{ flex: 1 }} />
-          <span style={{ width: 54, textAlign: 'right' }}>Exact</span>
-          <span style={{ width: 44, textAlign: 'right' }}>Pts</span>
+          <section style={{ margin: '0 12px', display: 'flex', flexDirection: 'column', gap: 2, paddingBottom: 12 }}>
+            {order.map((s, i) => (
+              <motion.div
+                key={s}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 + i * 0.05, duration: 0.25 }}
+                style={{ height: 48, display: 'grid', gridTemplateColumns: '24px 30px minmax(0,1fr) 54px 44px', gap: 10, alignItems: 'center', padding: '0 12px', borderRadius: 12, background: s === game.me ? '#1A1E26' : undefined }}
+              >
+                <span className="mono dim" style={{ fontSize: 13 }}>
+                  {tied(s) && rank(s) > 1 ? `=${rank(s)}` : rank(s)}
+                </span>
+                <span className={`av-s${s === game.me ? ' me' : ''}`}>{s === game.me ? 'Y' : initialOf(names[s])}</span>
+                <span style={{ fontSize: 16, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {names[s]}
+                  {room.members[s]?.isBot && <span className="bot-tag">BOT</span>}
+                </span>
+                <span className="mono dim" style={{ fontSize: 12, textAlign: 'right' }}>
+                  {exact(s)}/{rounds}
+                </span>
+                <span className="mono" style={{ fontSize: 19, fontWeight: 500, textAlign: 'right' }}>
+                  {signed(game.totals[s])}
+                </span>
+              </motion.div>
+            ))}
+          </section>
         </div>
-        <section style={{ margin: '0 12px', display: 'flex', flexDirection: 'column', gap: 2, paddingBottom: 12 }}>
-          {order.map((s, i) => (
-            <motion.div
-              key={s}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 + i * 0.05, duration: 0.25 }}
-              style={{ height: 48, display: 'grid', gridTemplateColumns: '24px 30px minmax(0,1fr) 54px 44px', gap: 10, alignItems: 'center', padding: '0 12px', borderRadius: 12, background: s === game.me ? '#1A1E26' : undefined }}
-            >
-              <span className="mono dim" style={{ fontSize: 13 }}>
-                {tied(s) && rank(s) > 1 ? `=${rank(s)}` : rank(s)}
-              </span>
-              <span className={`av-s${s === game.me ? ' me' : ''}`}>{s === game.me ? 'Y' : initialOf(names[s])}</span>
-              <span style={{ fontSize: 16, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 6, alignItems: 'center' }}>
-                {names[s]}
-                {room.members[s]?.isBot && <span className="bot-tag">BOT</span>}
-              </span>
-              <span className="mono dim" style={{ fontSize: 12, textAlign: 'right' }}>
-                {exact(s)}/{rounds}
-              </span>
-              <span className="mono" style={{ fontSize: 19, fontWeight: 500, textAlign: 'right' }}>
-                {signed(game.totals[s])}
-              </span>
-            </motion.div>
-          ))}
-        </section>
       </div>
       <div style={{ padding: '12px 12px calc(16px + var(--safe-b))', display: 'flex', gap: 8, flex: 'none' }}>
         <ChatButton className="btn surf" style={{ width: 52, padding: 0, color: 'var(--text-2)', flex: 'none' }} />
         <button className="btn surf" style={{ width: 52, padding: 0, color: 'var(--text-2)' }} aria-label="Full scoreboard" onClick={() => setScores(true)}>
           <Icon.Scores size={22} />
         </button>
-        <button className="btn surf" style={{ flex: '0 0 88px', padding: 0 }} onClick={share}>
-          {copied ? 'Copied' : 'Share'}
+        <button className="btn surf" style={{ flex: '0 0 88px', padding: 0 }} onClick={share} disabled={busy}>
+          {busy ? '…' : copied ? 'Copied' : 'Share'}
         </button>
-        <button className="btn amber" style={{ flex: 1 }} onClick={() => send({ type: 'rematch' })}>
-          Rematch, same room
+        <button
+          className="btn amber"
+          style={{ flex: 1 }}
+          onClick={() => {
+            if (live) send({ type: 'rematch' });
+            onLeave();
+          }}
+        >
+          {live ? 'Rematch, same room' : 'Join the rematch'}
         </button>
       </div>
       <AnimatePresence>{scores && <Scoreboard room={room} game={game} onClose={() => setScores(false)} />}</AnimatePresence>
