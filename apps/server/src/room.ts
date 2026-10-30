@@ -1,6 +1,6 @@
 import { Server, type Connection, type ConnectionContext, type WSMessage } from 'partyserver';
 import { CHAT_HISTORY, type ChatMsg, type GameEvent, type ServerMsg } from '@judgement/engine';
-import { idleExpired, newRoomState, nextAlarm, ROOM_TTL_MS, RoomCore, STALE_MS, type RoomState } from './core';
+import { idleExpired, newRoomState, nextAlarm, ROOM_TTL_MS, RoomCore, STALE_MS, type RoomState, type WakeKind } from './core';
 import { parseClientMsg } from './protocol';
 import { gameEnded, gameStarted, log, roomCreated } from './metrics';
 
@@ -15,6 +15,11 @@ const STORM_MAX = 120;
 const STORM_BACKOFF_MS = 30_000;
 const PING = 'ping';
 const PONG = 'pong';
+/** A due timer noticed this late by a message or connect means the alarm for it never ran on time. */
+const OVERDUE_MS = 1_000;
+
+/** What an alarm was set for: a game timer, the liveness sweep, room expiry, or a storm backoff. */
+type AlarmFor = WakeKind | 'sweep' | 'expiry' | 'storm';
 
 export class Room extends Server<Env> {
   static override options = { hibernate: true };
@@ -23,6 +28,10 @@ export class Room extends Server<Env> {
   private alarmRuns: number[] = [];
   /** Chat history, loaded on first use. Stored under its own key and written only when someone sends a message. */
   private chat: ChatMsg[] | null = null;
+  /** Last alarm this instance set, for logs. In memory only: null after hibernation. */
+  private armed: { at: number; for: AlarmFor; setAt: number } | null = null;
+  /** Retry count of the alarm being handled (Cloudflare retries alarms that throw). */
+  private alarmRetry = 0;
 
   override async onStart() {
     // Heartbeat: answered by the runtime without waking the hibernated room.
@@ -102,6 +111,7 @@ export class Room extends Server<Env> {
       }
     }
     conn.setState({ playerId: res.playerId, seen: now, sid });
+    this.checkOverdue('connect', now);
     await this.commit(this.core.tick(now));
     const history = await this.loadChat();
     if (history.length) this.send(conn, { type: 'chatHistory', msgs: history });
@@ -125,6 +135,7 @@ export class Room extends Server<Env> {
       this.send(conn, { type: 'error', code: 'bad_message' });
       return;
     }
+    this.checkOverdue('message', Date.now());
     const out = this.core.handle(playerId, msg, Date.now());
     if (out.error && out.error !== 'slow_down') this.send(conn, { type: 'error', code: out.error });
     if (out.reaction) this.broadcastMsg({ type: 'reaction', ...out.reaction });
@@ -161,8 +172,15 @@ export class Room extends Server<Env> {
     await this.commit(this.core.tick(now));
   }
 
+  /** Wraps partyserver's alarm entry point to keep Cloudflare's retry info, which it doesn't pass on. */
+  override async alarm(info?: { retryCount: number; isRetry: boolean }) {
+    this.alarmRetry = info?.retryCount ?? 0;
+    await super.alarm();
+  }
+
   override async onAlarm() {
     if (!this.core) return;
+    if (this.alarmRetry > 0) log('alarm_retry', { room: this.name, retry: this.alarmRetry });
     const now = Date.now();
     this.alarmRuns = this.alarmRuns.filter((t) => now - t < STORM_WINDOW_MS);
     this.alarmRuns.push(now);
@@ -184,8 +202,20 @@ export class Room extends Server<Env> {
       return;
     }
     // How late the alarm ran relative to what it was set for (bot move, deal, grace…).
-    const due = this.core.nextWake();
-    if (due !== null && now - due > 250) log('alarm_late', { room: this.name, lateMs: now - due });
+    const due = this.core.nextWakeInfo();
+    if (due && now - due.at > 250) {
+      // `armed*` says what this instance last set the alarm for; null if it hibernated since.
+      log('alarm_late', {
+        room: this.name,
+        lateMs: now - due.at,
+        kind: due.kind,
+        armedFor: this.armed?.for ?? null,
+        armedLateMs: this.armed ? now - this.armed.at : null,
+        armedAgoMs: this.armed ? now - this.armed.setAt : null,
+        retry: this.alarmRetry,
+        seq: this.core.s.seq ?? null,
+      });
+    }
     const before = JSON.stringify(this.core.s);
     const swept = this.sweep(now);
     const events = this.core.tick(now);
@@ -294,14 +324,52 @@ export class Room extends Server<Env> {
   private async schedule(now: number) {
     const core = this.core;
     if (!core) return;
-    const wake = core.nextWake();
+    const wake = core.nextWakeInfo();
     // Always right after a tick, so a past wake is work tick() could not do.
-    if (wake !== null && wake <= now) log('wake_stuck', { room: this.name, lateMs: now - wake });
-    let at = nextAlarm(now, wake, core.s.lastActivity, this.sweepAt());
+    if (wake !== null && wake.at <= now) log('wake_stuck', { room: this.name, lateMs: now - wake.at, kind: wake.kind });
+    // A bot is to act but nothing will wake the room for it: the table would stall until the next sweep.
+    if (core.botToAct() && wake?.kind !== 'bot') {
+      log('bot_unscheduled', { room: this.name, kind: wake?.kind ?? null, botDue: core.s.botDue, seq: core.s.seq ?? null });
+    }
+    const sweepAt = this.sweepAt();
+    let at = nextAlarm(now, wake?.at ?? null, core.s.lastActivity, sweepAt);
+    let why: AlarmFor = wake && at === Math.max(now + 50, wake.at) ? wake.kind : at === sweepAt ? 'sweep' : 'expiry';
     if (this.alarmRuns.length > STORM_MAX) {
       log('alarm_storm', { room: this.name, count: this.alarmRuns.length });
-      at = Math.max(at, now + STORM_BACKOFF_MS);
+      if (now + STORM_BACKOFF_MS > at) [at, why] = [now + STORM_BACKOFF_MS, 'storm'];
     }
     await this.ctx.storage.setAlarm(at);
+    this.armed = { at, for: why, setAt: now };
+    // Only while a game timer is pending: with none, the sweep/expiry re-arms on every commit and would flood the logs.
+    if (wake || why === 'storm') {
+      const stored = await this.ctx.storage.getAlarm();
+      log('alarm_set', {
+        room: this.name,
+        for: why,
+        inMs: at - now,
+        wake: wake?.kind ?? null,
+        wakeInMs: wake ? wake.at - now : null,
+        stored: stored === at ? 'ok' : stored,
+        seq: core.s.seq ?? null,
+      });
+    }
+  }
+
+  /**
+   * Logs a game timer that is already overdue when a message or connect arrives. The alarm should
+   * have handled it: this catches alarms that ran late or never ran, independent of the alarm itself.
+   */
+  private checkOverdue(via: 'message' | 'connect', now: number) {
+    const due = this.core?.nextWakeInfo();
+    if (!due || now - due.at <= OVERDUE_MS) return;
+    log('wake_overdue', {
+      room: this.name,
+      via,
+      kind: due.kind,
+      lateMs: now - due.at,
+      armedFor: this.armed?.for ?? null,
+      armedInMs: this.armed ? this.armed.at - now : null,
+      seq: this.core?.s.seq ?? null,
+    });
   }
 }

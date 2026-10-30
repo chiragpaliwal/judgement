@@ -119,6 +119,9 @@ export function nextAlarm(
 
 export type Rand = () => number;
 
+/** Which timer a wake-up is for: host transfer, auto-deal, seat hold, disconnect grace, bot move, turn timer. */
+export type WakeKind = 'host' | 'deal' | 'hold' | 'grace' | 'bot' | 'turn';
+
 export function newRoomState(code: string, now: number): RoomState {
   return {
     code,
@@ -561,26 +564,42 @@ export class RoomCore {
 
   /** Next time `tick` has something to do, or null. */
   nextWake(): number | null {
+    return this.nextWakeInfo()?.at ?? null;
+  }
+
+  /** Like `nextWake`, plus which timer it is (for logs). */
+  nextWakeInfo(): { at: number; kind: WakeKind } | null {
     const s = this.s;
-    const times: number[] = [];
+    let next: { at: number; kind: WakeKind } | null = null;
+    const add = (at: number, kind: WakeKind) => {
+      if (!next || at < next.at) next = { at, kind };
+    };
     const h = this.member(s.hostId);
     // Only worth waking for if someone could take over; otherwise this time stays in the past and
     // the alarm would fire over and over. A player connecting later triggers the transfer anyway.
     const heir = s.members.some((m) => !m.isBot && m.connected && m.id !== s.hostId);
-    if (h && !h.connected && h.offlineSince !== null && heir) times.push(h.offlineSince + HOLD_MS);
-    if (s.stage === 'game' && s.game?.phase === 'roundEnd' && s.autoDealAt !== null) times.push(s.autoDealAt);
+    if (h && !h.connected && h.offlineSince !== null && heir) add(h.offlineSince + HOLD_MS, 'host');
+    if (s.stage === 'game' && s.game?.phase === 'roundEnd' && s.autoDealAt !== null) add(s.autoDealAt, 'deal');
     if (this.gameActive()) {
       if (s.pause) {
-        if (!s.pause.expired) times.push(s.pause.holdUntil);
+        if (!s.pause.expired) add(s.pause.holdUntil, 'hold');
       } else {
         for (const m of s.members) {
-          if (!m.isBot && !m.autoplay && !m.connected && m.offlineSince !== null) times.push(m.offlineSince + GRACE_MS);
+          if (!m.isBot && !m.autoplay && !m.connected && m.offlineSince !== null) add(m.offlineSince + GRACE_MS, 'grace');
         }
-        if (s.botDue !== null) times.push(s.botDue);
-        if (s.turnDeadline !== null) times.push(s.turnDeadline);
+        if (s.botDue !== null) add(s.botDue, 'bot');
+        if (s.turnDeadline !== null) add(s.turnDeadline, 'turn');
       }
     }
-    return times.length ? Math.min(...times) : null;
+    return next;
+  }
+
+  /** True if a bot or autoplay seat is to act right now, so a 'bot' wake must be pending. */
+  botToAct(): boolean {
+    const s = this.s;
+    if (!this.gameActive() || s.pause) return false;
+    const actor = s.members[s.game!.round.turn];
+    return !!actor && (actor.isBot || actor.autoplay);
   }
 
   // ---------- views ----------

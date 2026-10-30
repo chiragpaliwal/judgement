@@ -267,6 +267,28 @@ describe('RoomCore', () => {
     expect(t.core.s.game!.phase).toBe('gameEnd');
   });
 
+  it('labels each wake-up, and a bot to act always has a bot wake pending', () => {
+    const t = setup(2, 2, { start: 3 });
+    t.send(t.host, { type: 'start' });
+    const kinds = new Set<string>();
+    for (let i = 0; i < 5000 && t.core.s.game!.phase !== 'gameEnd'; i++) {
+      // The invariant the server logs as `bot_unscheduled` when broken.
+      if (t.core.botToAct()) expect(t.core.nextWakeInfo()?.kind).toBe('bot');
+      const info = t.core.nextWakeInfo();
+      expect(info?.at ?? null).toBe(t.core.nextWake());
+      if (info) kinds.add(info.kind);
+      if (t.core.s.game!.phase === 'roundEnd') {
+        // Only one human readies, so the deal waits on the timer.
+        t.send(t.host, { type: 'ready' });
+        expect(t.core.nextWakeInfo()?.kind).toBe('deal');
+      }
+      if (humanAct(t)) continue;
+      t.advance(Math.max(0, (t.core.nextWake() ?? t.now) - t.now));
+    }
+    expect([...kinds].sort()).toEqual(['bot', 'deal']);
+    expect(t.core.botToAct()).toBe(false);
+  });
+
   it('nextAlarm never schedules in the past', () => {
     // Past wake and sweep are dropped; expiry is still ahead.
     expect(nextAlarm(1_000, 500, 0, 900, 10_000)).toBe(10_000);
