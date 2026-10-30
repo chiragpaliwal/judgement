@@ -9,6 +9,7 @@ playwright-report
 
 # Local design handoff (not committed)
 docs/design-handoff/
+docs/MULTIPLAYER_LESSONS.md
 
 # Env / secrets
 .env

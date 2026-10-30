@@ -125,7 +125,7 @@ export function newRoomState(code: string, now: number): RoomState {
     createdAt: now,
     hostId: '',
     members: [],
-    settings: { startCards: DEFAULT_START_CARDS, tracker: true, turnTimer: 0, scoring: 'classic', chat: true },
+    settings: { startCards: DEFAULT_START_CARDS, tracker: false, turnTimer: 0, scoring: 'stakes', chat: true },
     stage: 'lobby',
     game: null,
     ready: [],

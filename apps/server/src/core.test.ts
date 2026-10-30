@@ -60,14 +60,14 @@ function runToEnd(t: ReturnType<typeof setup>) {
 }
 
 describe('RoomCore', () => {
-  it('host picks the scoring mode; defaults to classic', () => {
+  it('host picks the scoring mode; defaults to stakes', () => {
     const t = setup(2, 1);
-    expect(t.core.s.settings.scoring).toBe('classic');
-    expect(t.send(t.ids[1], { type: 'setSettings', scoring: 'stakes' }).error).toBe('host_only');
-    expect(t.send(t.host, { type: 'setSettings', scoring: 'stakes' }).error).toBeUndefined();
     expect(t.core.s.settings.scoring).toBe('stakes');
+    expect(t.send(t.ids[1], { type: 'setSettings', scoring: 'classic' }).error).toBe('host_only');
+    expect(t.send(t.host, { type: 'setSettings', scoring: 'classic' }).error).toBeUndefined();
+    expect(t.core.s.settings.scoring).toBe('classic');
     t.send(t.host, { type: 'start' });
-    expect(t.core.s.game!.settings.scoring).toBe('stakes');
+    expect(t.core.s.game!.settings.scoring).toBe('classic');
     expect(parseClientMsg(JSON.stringify({ type: 'setSettings', scoring: 'stakes' }))).toEqual({ type: 'setSettings', scoring: 'stakes' });
     expect(parseClientMsg(JSON.stringify({ type: 'setSettings', scoring: 'double' }))).toBeNull();
   });
