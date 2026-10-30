@@ -5,6 +5,9 @@ export type TurnTimer = 0 | 30 | 60;
 /** classic: exact = 10 + bid, miss = 0. stakes: ±(11 × bid + 10), i.e. 21 for bid 1, 109 for bid 9. */
 export type ScoringMode = 'classic' | 'stakes';
 
+/** four: ♠ black ♥ red ♦ blue ♣ green. two: classic red/black. */
+export type DeckColors = 'four' | 'two';
+
 export interface Settings {
   /** Cards dealt in round 1 (capped by floor(52 / players)). */
   startCards: number;
@@ -16,6 +19,8 @@ export interface Settings {
   scoring: ScoringMode;
   /** Table chat on. Absent on rooms saved before it existed: treat as on. */
   chat?: boolean;
+  /** Suit palette for everyone at the table. Absent on rooms saved before it existed: treat as four. */
+  deckColors?: DeckColors;
 }
 
 export interface Play {

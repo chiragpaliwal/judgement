@@ -52,6 +52,13 @@ h1, h2, h3, p { margin: 0; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .s-s { color: var(--suit-s); } .s-h { color: var(--suit-h); } .s-d { color: var(--suit-d); } .s-c { color: var(--suit-c); }
 .sd-s { color: var(--suit-s-dark); } .sd-h { color: var(--suit-h-dark); } .sd-d { color: var(--suit-d-dark); } .sd-c { color: var(--suit-c-dark); }
+/* Two-colour deck (room setting, class set on <html> by RoomPage). */
+html.two-color {
+  --suit-d: var(--suit-h);
+  --suit-c: var(--suit-s);
+  --suit-d-dark: var(--suit-h-dark);
+  --suit-c-dark: var(--suit-s-dark);
+}
 
 /* App frame: full-height column, max phone width, centred on large screens */
 .scr {

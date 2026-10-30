@@ -72,6 +72,12 @@ export function RoomPage({ code }: { code: string }) {
   useEffect(() => {
     if (!chatOn) chatDisabled();
   }, [chatOn]);
+  // On <html> rather than this screen's root so portalled sheets (cards seen, chat) pick it up too.
+  const twoColor = room?.settings.deckColors === 'two';
+  useEffect(() => {
+    document.documentElement.classList.toggle('two-color', twoColor);
+    return () => document.documentElement.classList.remove('two-color');
+  }, [twoColor]);
   // Your turn wins: chat sheets step aside and whatever was typed stays as a draft.
   useEffect(() => {
     if (myTurn && !held) useChat.getState().close();

@@ -11,6 +11,7 @@ const schema = z.discriminatedUnion('type', [
     turnTimer: z.union([z.literal(0), z.literal(30), z.literal(60)]).optional(),
     scoring: z.enum(['classic', 'stakes']).optional(),
     chat: z.boolean().optional(),
+    deckColors: z.enum(['four', 'two']).optional(),
   }),
   z.object({ type: z.literal('addBot') }),
   z.object({ type: z.literal('removeMember'), id: z.string().max(40) }),

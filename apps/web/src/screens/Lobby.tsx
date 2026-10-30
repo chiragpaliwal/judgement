@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { DEFAULT_START_CARDS, effectiveStart, MAX_PLAYERS, maxCardsFor, MIN_PLAYERS, type RoomView, type ScoringMode, type TurnTimer } from '@judgement/engine';
+import { DEFAULT_START_CARDS, effectiveStart, MAX_PLAYERS, maxCardsFor, MIN_PLAYERS, type DeckColors, type RoomView, type ScoringMode, type TurnTimer } from '@judgement/engine';
 import { useRoom } from '../net/room';
 import { Icon } from '../ui/icons';
 import { initialOf } from '../game/seats';
@@ -20,6 +20,7 @@ export function Lobby({ room }: { room: RoomView }) {
   const st = room.settings;
   const players = Math.max(n, MIN_PLAYERS);
   const max = maxCardsFor(players);
+  const deck: DeckColors = st.deckColors ?? 'four';
   const eff = effectiveStart(st.startCards, players);
   const host = room.members.find((m) => m.isHost);
 
@@ -191,6 +192,21 @@ export function Lobby({ room }: { room: RoomView }) {
               {(['classic', 'stakes'] as ScoringMode[]).map((m) => (
                 <button key={m} className={st.scoring === m ? 'on' : ''} role="radio" aria-checked={st.scoring === m} disabled={!isHost} onClick={() => send({ type: 'setSettings', scoring: m })}>
                   {m === 'classic' ? 'Classic' : 'High stakes'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="set">
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Suit colors</div>
+              <div className="dim" style={{ fontSize: 12 }}>
+                {deck === 'two' ? 'Red ♥♦ and black ♠♣' : 'A color per suit, harder to misread'}
+              </div>
+            </div>
+            <div className="seg2" role="radiogroup" aria-label="Suit colors">
+              {(['four', 'two'] as DeckColors[]).map((d) => (
+                <button key={d} className={deck === d ? 'on' : ''} role="radio" aria-checked={deck === d} disabled={!isHost} onClick={() => send({ type: 'setSettings', deckColors: d })}>
+                  {d === 'four' ? 'Four' : 'Two'}
                 </button>
               ))}
             </div>

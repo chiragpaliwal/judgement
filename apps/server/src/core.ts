@@ -303,6 +303,7 @@ export class RoomCore {
         if (msg.tracker !== undefined) s.settings.tracker = msg.tracker;
         if (msg.turnTimer !== undefined) s.settings.turnTimer = msg.turnTimer;
         if (msg.scoring !== undefined) s.settings.scoring = msg.scoring;
+        if (msg.deckColors !== undefined) s.settings.deckColors = msg.deckColors;
         return this.ok();
       }
       case 'addBot': {
